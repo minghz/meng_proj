@@ -1,0 +1,8 @@
+tensorflow/src/Summer17Research/
+tensorflow/bin/
+tensorflow/include/
+tensorflow/input_data
+tensorflow/lib/
+tensorflow/lib64
+tensorflow/pip-selfcheck.json
+tensorflow/src/learning/summaries/
