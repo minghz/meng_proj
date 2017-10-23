@@ -1,79 +1,73 @@
-
-# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+# Fully Connected Network model to solve MNIST problem
+# Following example of TensorFlow tutorials
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ==============================================================================
+#
 
-"""A very simple MNIST classifier.
-See extensive documentation at
-https://www.tensorflow.org/get_started/mnist/beginners
-"""
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
-import argparse
-import sys
-
+# load mnist data
 from tensorflow.examples.tutorials.mnist import input_data
+mnist = input_data.read_data_sets('../MNIST_data', one_hot=True)
 
+# interactive session
 import tensorflow as tf
+sess = tf.InteractiveSession()
 
-FLAGS = None
+# INITIALIZE ===================================================================
+# input image in pixels
+x = tf.placeholder(tf.float32, shape=[None, 784])
+# output in class [0, 9]
+y_ = tf.placeholder(tf.float32, shape=[None, 10])
+#OBS: 'None' means batch size is any size
 
+# variables initialized to zero
+# W is a 784x10 matrix because we have 784 input features and 10 outputs
+W = tf.Variable(tf.zeros([784, 10]))
+# b is 10 dimentional vector (10 classes)
+b = tf.Variable(tf.zeros([10]))
 
-def main(_):
-  # Import data
-  mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
+# initialize all variables into the session
+# this must be done before variables can be used within a session
+sess.run(tf.global_variables_initializer())
 
-  # Create the model
-  x = tf.placeholder(tf.float32, [None, 784])
-  W = tf.Variable(tf.zeros([784, 10]))
-  b = tf.Variable(tf.zeros([10]))
-  y = tf.matmul(x, W) + b
+# TRAIN ========================================================================
+# the regression model - prediction or classification
+y = tf.matmul(x, W) + b
 
-  # Define loss and optimizer
-  y_ = tf.placeholder(tf.float32, [None, 10])
+# finding the loss function
+# using cross_entropy applied to the soft_max of target vs prediction
+cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y)
+mean_cross_entropy = tf.reduce_mean(cross_entropy)
 
-  # The raw formulation of cross-entropy,
-  #
-  #   tf.reduce_mean(-tf.reduce_sum(y_ * tf.log(tf.nn.softmax(y)),
-  #                                 reduction_indices=[1]))
-  #
-  # can be numerically unstable.
-  #
-  # So here we use tf.nn.softmax_cross_entropy_with_logits on the raw
-  # outputs of 'y', and then average across the batch.
-  cross_entropy = tf.reduce_mean(
-      tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y))
-  train_step = tf.train.GradientDescentOptimizer(0.5).minimize(cross_entropy)
+# using gradient descent to minimize cost
+train_step = tf.train.GradientDescentOptimizer(0.5).minimize(mean_cross_entropy)
+# when train_step is run, it will:
+#   apply gradient descent,
+#   update parameters
+# therefore, train the model by repeatedly running train_step
 
-  sess = tf.InteractiveSession()
-  tf.global_variables_initializer().run()
-  # Train
-  for _ in range(1000):
-    batch_xs, batch_ys = mnist.train.next_batch(100)
-    sess.run(train_step, feed_dict={x: batch_xs, y_: batch_ys})
+# we are running train 1000 times
+for _ in range(1000):
+  # the mini-batch of 100 samples for use in Stochastic Gradient Descent
+  batch = mnist.train.next_batch(10)
+  # feed_dict replaces the placeholder tensors x and y_ with
+  # the training examples
+  # note: can replace any tensor in graph with feed_dict
+  train_step.run(feed_dict={x: batch[0], y_: batch[1]})
 
-  # Test trained model
-  correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
-  accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-  print(sess.run(accuracy, feed_dict={x: mnist.test.images,
-                                      y_: mnist.test.labels}))
+# EVALUATE =====================================================================
+# tf.argmax finds the index of the highest value along an axis
+# in this case, the index corresponds to the class (because its one-hot)
+# and the axis is 1 because we are one-dimentional here
+predicted_class = tf.argmax(y, 1)
+actual_class = tf.argmax(y_, 1)
 
-if __name__ == '__main__':
-  parser = argparse.ArgumentParser()
-  parser.add_argument('--data_dir', type=str, default='/tmp/tensorflow/mnist/input_data',
-                      help='Directory for storing input data')
-  FLAGS, unparsed = parser.parse_known_args()
-  tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
+# below returns an array of booleans [True, False...]
+correct_prediction = tf.equal(predicted_class, actual_class)
+# we want to cast those to numbers and calculate the percentage True
+# the percentage True is just the average of the array
+# [1,1,0,1] = 0.75 = 75%
+accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+# I don't know how this .eval works.... I guess it evalates some shit....
+print(accuracy.eval(feed_dict={x: mnist.test.images, y_: mnist.test.labels}))

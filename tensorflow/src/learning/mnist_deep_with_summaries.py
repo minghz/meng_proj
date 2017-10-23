@@ -55,7 +55,7 @@ def train():
         image_shaped_input = tf.reshape(x, [-1, 28, 28, 1])
         tf.summary.image('input', image_shaped_input, 10)
 
-    # We can't initialize these variables to 0 - the network will get stuck.
+    # Initialize weights with a small value to prevent 0 gradients
     def weight_variable(shape):
         """Create a weight variable with appropriate initialization."""
         initial = tf.truncated_normal(shape, stddev=0.1)
@@ -106,15 +106,57 @@ def train():
             tf.summary.histogram('activations', activations)
             return activations
 
-    hidden1 = nn_layer(x, 784, 500, 'layer1')
+    # convolution layer - output same size as input: stride = 1; 0-padded
+    def conv2d(x, W):
+        return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
 
-    with tf.name_scope('dropout'):
-        keep_prob = tf.placeholder(tf.float32)
-        tf.summary.scalar('dropout_keep_probability', keep_prob)
-        dropped = tf.nn.dropout(hidden1, keep_prob)
+    # pooling layer - max pooling over 2x2 blocks
+    def max_pool_2x2(x):
+        return tf.nn.max_pool(x,
+                              ksize=[1, 2, 2, 1],
+                              strides=[1, 2, 2, 1],
+                              padding='SAME')
 
-    # Do not apply softmax activation yet, see below.
-    y = nn_layer(dropped, 500, 10, 'layer2', act=tf.identity)
+    # First conv. layer has 32 features of 5x5 patch
+    # 5x5 patch, 1 input chanel, 32 ouput chanel (features)
+    W_conv1 = weight_variable([5, 5, 1, 32])
+    b_conv1 = bias_variable([32])  # one bias for each of 32 channels (features)
+
+    # reshape input to 4d tensor
+    # -1?, 28x28 widthxheight, 1 color channel
+    x_image = tf.reshape(x, [-1, 28, 28, 1])
+
+    # first conv layer, output is same as input 28x28
+    h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
+    # first max pool layer, endinv up with 14x14 size
+    h_pool1 = max_pool_2x2(h_conv1)
+
+    # second conv layer, 64 features, 5x5 patch
+    # 32 input channel because 32 input feature from 1st layer
+    W_conv2 = weight_variable([5, 5, 32, 64])
+    b_conv2 = bias_variable([64])
+
+    h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
+    h_pool2 = max_pool_2x2(h_conv2)  # should have size 7x7 here
+
+    # add fully-connected layer of 1024 neurons to process everything
+    # one dimention the output from 2nd layer, 1024 neurons
+    W_fc1 = weight_variable([7 * 7 * 64, 1024])
+    b_fc1 = bias_variable([1024])
+
+    # -1?, flatten the output from 2nd layer
+    h_pool2_flat = tf.reshape(h_pool2, [-1, 7 * 7 * 64])
+    # ( x*W + b ) line normal fully connected
+    h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
+
+    # Apply Dropout to avoid overfitting
+    keep_prob = tf.placeholder(tf.float32)
+    h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
+
+    W_fc2 = weight_variable([1024, 10])
+    b_fc2 = bias_variable([10])
+
+    y_conv = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
 
     with tf.name_scope('cross_entropy'):
         # The raw formulation of cross-entropy,
@@ -127,7 +169,7 @@ def train():
         # So here we use tf.nn.softmax_cross_entropy_with_logits on the
         # raw outputs of the nn_layer above, and then average across
         # the batch.
-        diff = tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y)
+        diff = tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_conv)
         with tf.name_scope('total'):
             cross_entropy = tf.reduce_mean(diff)
     tf.summary.scalar('cross_entropy', cross_entropy)
@@ -138,16 +180,18 @@ def train():
 
     with tf.name_scope('accuracy'):
         with tf.name_scope('correct_prediction'):
-            correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
+            correct_prediction = tf.equal(tf.argmax(y_conv, 1),
+                                          tf.argmax(y_, 1))
         with tf.name_scope('accuracy'):
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
     tf.summary.scalar('accuracy', accuracy)
 
     # Merge all the summaries and write them out to
-    # /tmp/tensorflow/mnist/logs/mnist_with_summaries (by default)
+    # FLAGS.log_dir
     merged = tf.summary.merge_all()
     train_writer = tf.summary.FileWriter(FLAGS.log_dir + '/train', sess.graph)
     test_writer = tf.summary.FileWriter(FLAGS.log_dir + '/test')
+
     tf.global_variables_initializer().run()
 
     # Train the model, and also write summaries.
