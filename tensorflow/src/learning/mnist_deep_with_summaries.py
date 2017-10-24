@@ -76,6 +76,29 @@ def train():
       tf.summary.scalar('min', tf.reduce_min(var))
       tf.summary.histogram('histogram', var)
 
+  def nn_layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu):
+    """Reusable code for making a simple neural net layer.
+
+    It does a matrix multiply, bias add, and then uses relu to nonlinearize.
+    It also sets up name scoping so that the resultant graph is easy to read,
+    and adds a number of summary ops.
+    """
+    # Adding a name scope ensures logical grouping of the layers in the graph.
+    with tf.name_scope(layer_name):
+      # This Variable will hold the state of the weights for the layer
+      with tf.name_scope('weights'):
+        weights = weight_variable([input_dim, output_dim])
+        variable_summaries(weights)
+      with tf.name_scope('biases'):
+        biases = bias_variable([output_dim])
+        variable_summaries(biases)
+      with tf.name_scope('Wx_plus_b'):
+        preactivate = tf.matmul(input_tensor, weights) + biases
+        tf.summary.histogram('pre_activations', preactivate)
+      activations = act(preactivate, name='activation')
+      tf.summary.histogram('activations', activations)
+      return activations
+
   # convolution layer - output same size as input: stride = 1; 0-padded
   def conv2d(x, W):
     return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
@@ -84,47 +107,52 @@ def train():
   def max_pool_2x2(x):
     return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
-  # First conv. layer has 32 features of 5x5 patch
-  # 5x5 patch, 1 input chanel, 32 ouput chanel (features)
-  W_conv1 = weight_variable([5, 5, 1, 32])
-  b_conv1 = bias_variable([32])  # one bias for each of 32 channels (features)
+  def conv_layer(patch_dim, num_input_ch, num_features, flat_inputs, act=tf.nn.relu):
+    """ Reusable code for making a convolution layer
+    It has a conv layer and a pooling layer
+    """
+    W_conv = weight_variable([patch_dim[0], patch_dim[1], num_input_ch, num_features])
+    b_conv = bias_variable([num_features])
+
+    h_conv = act(conv2d(flat_inputs, W_conv) + b_conv)
+    h_pool = max_pool_2x2(h_conv)
+
+    return h_pool
 
   # reshape input to 4d tensor
   # -1?, 28x28 widthxheight, 1 color channel
-  x_image = tf.reshape(x, [-1, 28, 28, 1])
+  flat_inputs = tf.reshape(x, [-1, 28, 28, 1])
 
+  # First conv. layer has 32 features of 5x5 patch
+  # 5x5 patch, 1 input chanel, 32 ouput chanel (features)
   # first conv layer, output is same as input 28x28
-  h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
   # first max pool layer, endinv up with 14x14 size
-  h_pool1 = max_pool_2x2(h_conv1)
+  conv1_out = conv_layer([5, 5], 1, 32, flat_inputs)
 
+  print(conv1_out)
   # second conv layer, 64 features, 5x5 patch
   # 32 input channel because 32 input feature from 1st layer
-  W_conv2 = weight_variable([5, 5, 32, 64])
-  b_conv2 = bias_variable([64])
+  conv2_out = conv_layer([5, 5], 32, 64, conv1_out)
 
-  h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
-  h_pool2 = max_pool_2x2(h_conv2)  # should have size 7x7 here
+  print(conv2_out)
+  # -1?, flatten the output from 2nd layer
+  flat_conv2_out = tf.reshape(conv2_out, [-1, 7 * 7 * 64])
 
   # add fully-connected layer of 1024 neurons to process everything
   # one dimention the output from 2nd layer, 1024 neurons
-  W_fc1 = weight_variable([7 * 7 * 64, 1024])
-  b_fc1 = bias_variable([1024])
-
-  # -1?, flatten the output from 2nd layer
-  h_pool2_flat = tf.reshape(h_pool2, [-1, 7 * 7 * 64])
   # ( x*W + b ) line normal fully connected
-  h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
+  h_fc1 = nn_layer(flat_conv2_out, 7 * 7 * 64, 1024, 'h_fc1')
 
+  print(h_fc1)
   # Apply Dropout to avoid overfitting
-  keep_prob = tf.placeholder(tf.float32)
-  h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
+  with tf.name_scope('dropout'):
+    keep_prob = tf.placeholder(tf.float32)
+    tf.summary.scalar('dropout_keep_probability', keep_prob)
+    h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
 
-  W_fc2 = weight_variable([1024, 10])
-  b_fc2 = bias_variable([10])
+  y_conv = nn_layer(h_fc1_drop, 1024, 10, 'y_fc2')
 
-  y_conv = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
-
+  print(y_conv)
   with tf.name_scope('cross_entropy'):
     # The raw formulation of cross-entropy,
     #
@@ -146,8 +174,7 @@ def train():
 
   with tf.name_scope('accuracy'):
     with tf.name_scope('correct_prediction'):
-      correct_prediction = tf.equal(tf.argmax(y_conv, 1),
-                                      tf.argmax(y_, 1))
+      correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
     with tf.name_scope('accuracy'):
       accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
   tf.summary.scalar('accuracy', accuracy)
