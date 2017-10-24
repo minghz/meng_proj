@@ -3,6 +3,7 @@
 # Convolutional Network model to solve MNIST problem
 # Following example of TensorFlow tutorials
 #
+# test accuracy 0.9926
 #
 
 # load mnist data
