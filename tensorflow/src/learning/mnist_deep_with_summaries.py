@@ -107,17 +107,23 @@ def train():
   def max_pool_2x2(x):
     return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
 
-  def conv_layer(patch_dim, num_input_ch, num_features, flat_inputs, act=tf.nn.relu):
+  def conv_layer(patch_dim, num_input_ch, num_features, flat_inputs, layer_name, act=tf.nn.relu):
     """ Reusable code for making a convolution layer
     It has a conv layer and a pooling layer
     """
-    W_conv = weight_variable([patch_dim[0], patch_dim[1], num_input_ch, num_features])
-    b_conv = bias_variable([num_features])
-
-    h_conv = act(conv2d(flat_inputs, W_conv) + b_conv)
-    h_pool = max_pool_2x2(h_conv)
-
-    return h_pool
+    with tf.name_scope(layer_name):
+      with tf.name_scope('weights'):
+        W_conv = weight_variable([patch_dim[0], patch_dim[1], num_input_ch, num_features])
+        variable_summaries(W_conv)
+      with tf.name_scope('biases'):
+        b_conv = bias_variable([num_features])
+        variable_summaries(b_conv)
+      with tf.name_scope('conv'):
+        h_conv = act(conv2d(flat_inputs, W_conv) + b_conv)
+        tf.summary.histogram('convolutions', h_conv)
+      h_pool = max_pool_2x2(h_conv)
+      tf.summary.histogram('pools', h_pool)
+      return h_pool
 
   # reshape input to 4d tensor
   # -1?, 28x28 widthxheight, 1 color channel
@@ -127,12 +133,12 @@ def train():
   # 5x5 patch, 1 input chanel, 32 ouput chanel (features)
   # first conv layer, output is same as input 28x28
   # first max pool layer, endinv up with 14x14 size
-  conv1_out = conv_layer([5, 5], 1, 32, flat_inputs)
+  conv1_out = conv_layer([5, 5], 1, 32, flat_inputs, 'h_conv1')
 
   print(conv1_out)
   # second conv layer, 64 features, 5x5 patch
   # 32 input channel because 32 input feature from 1st layer
-  conv2_out = conv_layer([5, 5], 32, 64, conv1_out)
+  conv2_out = conv_layer([5, 5], 32, 64, conv1_out, 'h_conv2')
 
   print(conv2_out)
   # -1?, flatten the output from 2nd layer
