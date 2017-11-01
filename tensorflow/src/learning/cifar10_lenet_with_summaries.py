@@ -1,25 +1,9 @@
-# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
+# LeNet neural networks architecture to train CIFAR-10 dataset
 #
-# Licensed under the Apache License, Version 2.0 (the 'License');
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an 'AS IS' BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Minghua Zhao, Nov, 2017
+# M.Eng. Proj. J.Anderson
 # ==============================================================================
-"""A simple MNIST classifier which displays summaries in TensorBoard.
 
-This is an unimpressive MNIST model, but it is a good example of using
-tf.name_scope to make a graph legible in the TensorBoard graph explorer, and of
-naming summary tags so that they are grouped meaningfully in TensorBoard.
-
-It demonstrates the functionality of every TensorBoard dashboard.
-"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -31,12 +15,9 @@ import sys
 import tensorflow as tf
 
 from tensorflow.examples.tutorials.mnist import input_data
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # supress tensorflow warning
 
-# supress tensorflow warning
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-
-FLAGS = None
-
+FLAGS = None # argparse
 
 def train():
   # Import data
