@@ -16,8 +16,8 @@
 """A binary to train CIFAR-10 using a single GPU.
 
 Accuracy:
-cifar10_train.py achieves ~86% accuracy after 100K steps (256 epochs of
-data) as judged by cifar10_eval.py.
+cifar10_fix_train.py achieves ~86% accuracy after 100K steps (256 epochs of
+data) as judged by cifar10_fix_eval.py.
 
 Speed: With batch_size 128.
 
@@ -43,9 +43,12 @@ import tensorflow as tf
 
 import cifar10
 
+# use custom op to calculate gradients
+reshape_fix = tf.load_op_library('custom_ops/reshape_fix.so')
+
 parser = cifar10.parser
 
-parser.add_argument('--train_dir', type=str, default='/tmp/cifar10_train',
+parser.add_argument('--train_dir', type=str, default='/tmp/cifar10_fix_train',
                     help='Directory where to write event logs and checkpoint.')
 
 parser.add_argument('--max_steps', type=int, default=1000000,

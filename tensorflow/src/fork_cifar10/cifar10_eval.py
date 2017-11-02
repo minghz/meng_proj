@@ -16,11 +16,11 @@
 """Evaluation for CIFAR-10.
 
 Accuracy:
-cifar10_train.py achieves 83.0% accuracy after 100K steps (256 epochs
-of data) as judged by cifar10_eval.py.
+cifar10_fix_train.py achieves 83.0% accuracy after 100K steps (256 epochs
+of data) as judged by cifar10_fix_eval.py.
 
 Speed:
-On a single Tesla K40, cifar10_train.py processes a single batch of 128 images
+On a single Tesla K40, cifar10_fix_train.py processes a single batch of 128 images
 in 0.25-0.35 sec (i.e. 350 - 600 images /sec). The model reaches ~86%
 accuracy after 100K steps in 8 hours of training time.
 
@@ -45,13 +45,13 @@ import cifar10
 
 parser = cifar10.parser
 
-parser.add_argument('--eval_dir', type=str, default='/tmp/cifar10_eval',
+parser.add_argument('--eval_dir', type=str, default='/tmp/cifar10_fix_eval',
                     help='Directory where to write event logs.')
 
 parser.add_argument('--eval_data', type=str, default='test',
                     help='Either `test` or `train_eval`.')
 
-parser.add_argument('--checkpoint_dir', type=str, default='/tmp/cifar10_train',
+parser.add_argument('--checkpoint_dir', type=str, default='/tmp/cifar10_fix_train',
                     help='Directory where to read model checkpoints.')
 
 parser.add_argument('--eval_interval_secs', type=int, default=60*5,
@@ -79,7 +79,7 @@ def eval_once(saver, summary_writer, top_k_op, summary_op):
       # Restores from checkpoint
       saver.restore(sess, ckpt.model_checkpoint_path)
       # Assuming model_checkpoint_path looks something like:
-      #   /my-favorite-path/cifar10_train/model.ckpt-0,
+      #   /my-favorite-path/cifar10_fix_train/model.ckpt-0,
       # extract global_step from it.
       global_step = ckpt.model_checkpoint_path.split('/')[-1].split('-')[-1]
     else:
