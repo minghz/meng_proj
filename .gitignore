@@ -1,4 +1,5 @@
 tensorflow/src/Summer17Research/
+tensorflow/src/models/
 tensorflow/bin/
 tensorflow/include/
 tensorflow/input_data
