@@ -38,20 +38,24 @@ from __future__ import print_function
 
 from datetime import datetime
 import time
+import os
 
 import tensorflow as tf
 
 import cifar10
 
+# supress tensorflow warning
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 # use custom op to calculate gradients
-reshape_fix = tf.load_op_library('custom_ops/reshape_fix.so')
+reshape_fix = tf.load_op_library('custom_ops/reshape_fix.so').reshape_fix
 
 parser = cifar10.parser
 
 parser.add_argument('--train_dir', type=str, default='/tmp/cifar10_fix_train',
                     help='Directory where to write event logs and checkpoint.')
 
-parser.add_argument('--max_steps', type=int, default=1000000,
+parser.add_argument('--max_steps', type=int, default=1000,
                     help='Number of batches to run.')
 
 parser.add_argument('--log_device_placement', type=bool, default=False,
@@ -64,13 +68,16 @@ parser.add_argument('--log_frequency', type=int, default=10,
 def train():
   """Train CIFAR-10 for a number of steps."""
   with tf.Graph().as_default():
-    global_step = tf.contrib.framework.get_or_create_global_step()
+    global_step = tf.train.get_or_create_global_step()
 
     # Get images and labels for CIFAR-10.
     # Force input pipeline to CPU:0 to avoid operations sometimes ending up on
     # GPU and resulting in a slow down.
     with tf.device('/cpu:0'):
       images, labels = cifar10.distorted_inputs()
+
+    # Acquire the adjustable variables for fixed point precision
+    #ILFLU, ILFLF, ILFLB, ofb, ofa, ofg = cifar10.precision_settings(global_step)
 
     # Build a Graph that computes the logits predictions from the
     # inference model.
@@ -106,14 +113,33 @@ def train():
 
           format_str = ('%s: step %d, loss = %.2f (%.1f examples/sec; %.3f '
                         'sec/batch)')
+
           print (format_str % (datetime.now(), self._step, loss_value,
                                examples_per_sec, sec_per_batch))
+
+
+    class _FixAdjustmentHook(tf.train.SessionRunHook):
+      """Adjust FixPoint integer numbers vs. fraction numbers"""
+
+      def begin(self):
+        self._step = -1
+        ILFLU, ILFLF, ILFLB, ofb, ofa, ofg = cifar10.precision_settings(self._step)
+
+      def before_run(self, run_context):
+        self._step += 1
+        return tf.train.SessionRunArgs(loss)  # Asks for loss value.
+
+      def after_run(self, run_context, run_values):
+        print (run_values)
+        print (self._step)
+
 
     with tf.train.MonitoredTrainingSession(
         checkpoint_dir=FLAGS.train_dir,
         hooks=[tf.train.StopAtStepHook(last_step=FLAGS.max_steps),
                tf.train.NanTensorHook(loss),
-               _LoggerHook()],
+               _LoggerHook(),
+               _FixAdjustmentHook()],
         config=tf.ConfigProto(
             log_device_placement=FLAGS.log_device_placement)) as mon_sess:
       while not mon_sess.should_stop():

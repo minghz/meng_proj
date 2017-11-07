@@ -47,6 +47,14 @@ import tensorflow as tf
 
 import cifar10_input
 
+# use custom op to calculate gradients
+reshape_fix = tf.load_op_library('custom_ops/reshape_fix.so').reshape_fix
+#reshape_fix(tf.reshape(x, [-1,28,28,1]),
+#        ILFLF,
+#        ILFLB,
+#        overflowA,
+#        overflowG)
+
 parser = argparse.ArgumentParser()
 
 # Basic model parameters.
@@ -101,7 +109,7 @@ def _activation_summary(x):
                                        tf.nn.zero_fraction(x))
 
 
-def _variable_on_cpu(name, shape, initializer):
+def variable_on_cpu(name, shape, initializer):
   """Helper to create a Variable stored on CPU memory.
 
   Args:
@@ -135,7 +143,7 @@ def _variable_with_weight_decay(name, shape, stddev, wd):
     Variable Tensor
   """
   dtype = tf.float16 if FLAGS.use_fp16 else tf.float32
-  var = _variable_on_cpu(
+  var = variable_on_cpu(
       name,
       shape,
       tf.truncated_normal_initializer(stddev=stddev, dtype=dtype))
@@ -185,11 +193,77 @@ def inputs(eval_data):
   images, labels = cifar10_input.inputs(eval_data=eval_data,
                                         data_dir=data_dir,
                                         batch_size=FLAGS.batch_size)
+
   if FLAGS.use_fp16:
     images = tf.cast(images, tf.float16)
     labels = tf.cast(labels, tf.float16)
   return images, labels
 
+def precision_settings(step):
+  """According to the overal step of the training, we want to slowly
+  increment the precision of our variables """
+
+  ILFLU = tf.get_variable('ILFLU', [2], trainable=False)
+  ILFLF = tf.get_variable('ILFLF', [2], trainable=False)
+  ILFLB = tf.get_variable('ILFLB', [2], trainable=False)
+
+  ofw = tf.get_variable('ofW', [2], trainable=False)
+  ofb = tf.get_variable('ofB', [2], trainable=False)
+  ofa = tf.get_variable('ofA', [2], trainable=False)
+  ofg = tf.get_variable('ofG', [2], trainable=False)
+
+  if(step < 50): #setup
+    if ((ofw[0] > 0) or (ofb[0] > 0)):
+      if (ILFLU[1] > 0):
+        ILFLU = tf.add(ILFLU, [1, -1])
+      else:
+        ILFLU = tf.add(ILFLU, [1, 0])
+
+      ofw = [0, ofw[1]]
+      ofb = [0, ofb[1]]
+
+    if (ofg[0] > 0):
+      if (ILFLB[1] > 0):
+        ILFLB = tf.add(ILFLB,[1,-1])
+      else:
+        ILFLB = tf.add(ILFLB,[1,0])
+
+      ofg = [0, ofg[1]]
+
+    if (ofa[0] > 0):
+      if (ILFLF[1] > 0):
+        ILFLF = tf.add(ILFLF, [1, -1])
+      else:
+        ILFLF = tf.add(ILFLF, [1, 0])
+
+      ofa = [0, ofa[1]]
+
+  # wait until training is "stabalized"
+  # then reduce the precision to target length
+  elif (i == 50):
+    ILFLU = [ILFLU[0], 10 - ILFLU[0]]
+    ILFLB = [ILFLB[0], 10 - ILFLB[0]]
+    ILFLF = [ILFLF[0], 10 - ILFLF[0]]
+
+  # increase the precision of the variable catagory
+  # that exceeded the underflow threshold
+  elif (i < FLAGS.max_steps - 100):
+    if (ofw[1] > 0.05 or ofb[1] > 0.05):
+      ILFLU[1] += 1
+
+    if (ofa[1] > 0.05):
+      ILFLF[1] += 1
+
+    if (ofg[1] > 0.05):
+      ILFLB[1] += 1
+
+  #change precision to final_length for the final_steps of training
+  elif (i == FLAGS.max_steps - 100):
+    ILFLU = [ILFLU[0], 30 - ILFLU[0]]
+    ILFLB = [ILFLB[0], 30 - ILFLB[0]]
+    ILFLF = [ILFLF[0], 30 - ILFLF[0]]
+
+  return ILFLU, ILFLF, ILFLB, ofb, ofa, ofg
 
 def inference(images):
   """Build the CIFAR-10 model.
@@ -212,7 +286,7 @@ def inference(images):
                                          stddev=5e-2,
                                          wd=0.0)
     conv = tf.nn.conv2d(images, kernel, [1, 1, 1, 1], padding='SAME')
-    biases = _variable_on_cpu('biases', [64], tf.constant_initializer(0.0))
+    biases = variable_on_cpu('biases', [64], tf.constant_initializer(0.0))
     pre_activation = tf.nn.bias_add(conv, biases)
     conv1 = tf.nn.relu(pre_activation, name=scope.name)
     _activation_summary(conv1)
@@ -231,7 +305,7 @@ def inference(images):
                                          stddev=5e-2,
                                          wd=0.0)
     conv = tf.nn.conv2d(norm1, kernel, [1, 1, 1, 1], padding='SAME')
-    biases = _variable_on_cpu('biases', [64], tf.constant_initializer(0.1))
+    biases = variable_on_cpu('biases', [64], tf.constant_initializer(0.1))
     pre_activation = tf.nn.bias_add(conv, biases)
     conv2 = tf.nn.relu(pre_activation, name=scope.name)
     _activation_summary(conv2)
@@ -250,7 +324,7 @@ def inference(images):
     dim = reshape.get_shape()[1].value
     weights = _variable_with_weight_decay('weights', shape=[dim, 384],
                                           stddev=0.04, wd=0.004)
-    biases = _variable_on_cpu('biases', [384], tf.constant_initializer(0.1))
+    biases = variable_on_cpu('biases', [384], tf.constant_initializer(0.1))
     local3 = tf.nn.relu(tf.matmul(reshape, weights) + biases, name=scope.name)
     _activation_summary(local3)
 
@@ -258,7 +332,7 @@ def inference(images):
   with tf.variable_scope('local4') as scope:
     weights = _variable_with_weight_decay('weights', shape=[384, 192],
                                           stddev=0.04, wd=0.004)
-    biases = _variable_on_cpu('biases', [192], tf.constant_initializer(0.1))
+    biases = variable_on_cpu('biases', [192], tf.constant_initializer(0.1))
     local4 = tf.nn.relu(tf.matmul(local3, weights) + biases, name=scope.name)
     _activation_summary(local4)
 
@@ -269,7 +343,7 @@ def inference(images):
   with tf.variable_scope('softmax_linear') as scope:
     weights = _variable_with_weight_decay('weights', [192, NUM_CLASSES],
                                           stddev=1/192.0, wd=0.0)
-    biases = _variable_on_cpu('biases', [NUM_CLASSES],
+    biases = variable_on_cpu('biases', [NUM_CLASSES],
                               tf.constant_initializer(0.0))
     softmax_linear = tf.add(tf.matmul(local4, weights), biases, name=scope.name)
     _activation_summary(softmax_linear)
