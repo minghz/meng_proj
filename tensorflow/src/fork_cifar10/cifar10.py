@@ -1,42 +1,9 @@
-# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ==============================================================================
-
-"""Builds the CIFAR-10 network.
-
-Summary of available functions:
-
- # Compute input images and labels for training. If you would like to run
- # evaluations, use inputs() instead.
- inputs, labels = distorted_inputs()
-
- # Compute inference on the model inputs to make a prediction.
- predictions = inference(inputs)
-
- # Compute the total loss of the prediction with respect to the labels.
- loss = loss(predictions, labels)
-
- # Create a graph to run one step of training with respect to the loss.
- train_op = train(loss, global_step)
-"""
-
-# pylint: disable=missing-docstring
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
 import argparse
+import time
 import os
 import re
 import sys
@@ -49,11 +16,6 @@ import cifar10_input
 
 # use custom op to calculate gradients
 reshape_fix = tf.load_op_library('custom_ops/reshape_fix.so').reshape_fix
-#reshape_fix(tf.reshape(x, [-1,28,28,1]),
-#        ILFLF,
-#        ILFLB,
-#        overflowA,
-#        overflowG)
 
 parser = argparse.ArgumentParser()
 
@@ -66,6 +28,18 @@ parser.add_argument('--data_dir', type=str, default='/tmp/cifar10_fix_data',
 
 parser.add_argument('--use_fp16', type=bool, default=False,
                     help='Train the model using fp16.')
+
+parser.add_argument('--log_dir', type=str, default='/tmp/cifar10_fix',
+                    help='Directory where to write event logs and checkpoint.')
+
+parser.add_argument('--max_steps', type=int, default=1000,
+                    help='Number of batches to run.')
+
+parser.add_argument('--log_device_placement', type=bool, default=False,
+                    help='Whether to log device placement.')
+
+parser.add_argument('--log_frequency', type=int, default=10,
+                    help='How often to log results to the console.')
 
 FLAGS = parser.parse_args()
 
@@ -105,8 +79,7 @@ def _activation_summary(x):
   # session. This helps the clarity of presentation on tensorboard.
   tensor_name = re.sub('%s_[0-9]*/' % TOWER_NAME, '', x.op.name)
   tf.summary.histogram(tensor_name + '/activations', x)
-  tf.summary.scalar(tensor_name + '/sparsity',
-                                       tf.nn.zero_fraction(x))
+  tf.summary.scalar(tensor_name + '/sparsity', tf.nn.zero_fraction(x))
 
 
 def variable_on_cpu(name, shape, initializer):
@@ -266,6 +239,7 @@ def precision_settings(step):
   return ILFLU, ILFLF, ILFLB, ofb, ofa, ofg
 
 def inference(images):
+  print('inf')
   """Build the CIFAR-10 model.
 
   Args:
@@ -352,6 +326,7 @@ def inference(images):
 
 
 def loss(logits, labels):
+  print("loss")
   """Add L2Loss to all the trainable variables.
 
   Add summary for "Loss" and "Loss/avg".
@@ -402,7 +377,8 @@ def _add_loss_summaries(total_loss):
   return loss_averages_op
 
 
-def train(total_loss, global_step):
+def train(total_loss, lr):
+  print("train")
   """Train CIFAR-10 model.
 
   Create an optimizer and apply to all trainable variables. Add moving
@@ -419,12 +395,6 @@ def train(total_loss, global_step):
   num_batches_per_epoch = NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN / FLAGS.batch_size
   decay_steps = int(num_batches_per_epoch * NUM_EPOCHS_PER_DECAY)
 
-  # Decay the learning rate exponentially based on the number of steps.
-  lr = tf.train.exponential_decay(INITIAL_LEARNING_RATE,
-                                  global_step,
-                                  decay_steps,
-                                  LEARNING_RATE_DECAY_FACTOR,
-                                  staircase=True)
   tf.summary.scalar('learning_rate', lr)
 
   # Generate moving averages of all losses and associated summaries.
@@ -436,7 +406,7 @@ def train(total_loss, global_step):
     grads = opt.compute_gradients(total_loss)
 
   # Apply gradients.
-  apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
+  apply_gradient_op = opt.apply_gradients(grads)
 
   # Add histograms for trainable variables.
   for var in tf.trainable_variables():
@@ -448,8 +418,7 @@ def train(total_loss, global_step):
       tf.summary.histogram(var.op.name + '/gradients', grad)
 
   # Track the moving averages of all trainable variables.
-  variable_averages = tf.train.ExponentialMovingAverage(
-      MOVING_AVERAGE_DECAY, global_step)
+  variable_averages = tf.train.ExponentialMovingAverage(MOVING_AVERAGE_DECAY)
   variables_averages_op = variable_averages.apply(tf.trainable_variables())
 
   with tf.control_dependencies([apply_gradient_op, variables_averages_op]):
