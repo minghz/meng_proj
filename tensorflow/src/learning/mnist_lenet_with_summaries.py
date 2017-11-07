@@ -39,7 +39,9 @@ FLAGS = None
 
 def train():
   # Import data
-  mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True, fake_data=FLAGS.fake_data)
+  mnist = input_data.read_data_sets(FLAGS.data_dir,
+                                    one_hot=True,
+                                    fake_data=FLAGS.fake_data)
   sess = tf.InteractiveSession()
   # Create a multilayer model.
 
@@ -104,15 +106,26 @@ def train():
 
   # pooling layer - max pooling over 2x2 blocks
   def max_pool_2x2(x):
-    return tf.nn.max_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+    return tf.nn.max_pool(x,
+                          ksize=[1, 2, 2, 1],
+                          strides=[1, 2, 2, 1],
+                          padding='SAME')
 
-  def conv_layer(patch_dim, num_input_ch, num_features, flat_inputs, layer_name, act=tf.nn.relu):
+  def conv_layer(patch_dim,
+                 num_input_ch,
+                 num_features,
+                 flat_inputs,
+                 layer_name,
+                 act=tf.nn.relu):
     """ Reusable code for making a convolution layer
     It has a conv layer and a pooling layer
     """
     with tf.name_scope(layer_name):
       with tf.name_scope('weights'):
-        W_conv = weight_variable([patch_dim[0], patch_dim[1], num_input_ch, num_features])
+        W_conv = weight_variable([patch_dim[0],
+                                 patch_dim[1],
+                                 num_input_ch,
+                                 num_features])
         variable_summaries(W_conv)
       with tf.name_scope('biases'):
         b_conv = bias_variable([num_features])
@@ -205,7 +218,10 @@ def train():
       if i % 1000 == 999:  # Record execution stats
         run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
         run_metadata = tf.RunMetadata()
-        summary, _ = sess.run([merged, train_step], feed_dict=feed_dict(True), options=run_options, run_metadata=run_metadata)
+        summary, _ = sess.run([merged, train_step],
+                              feed_dict=feed_dict(True),
+                              options=run_options,
+                              run_metadata=run_metadata)
         train_writer.add_run_metadata(run_metadata, 'step%03d' % i)
         train_writer.add_summary(summary, i)
         print('Adding run metadata for', i)
@@ -215,7 +231,9 @@ def train():
   train_writer.close()
   test_writer.close()
 
-  print('test accuracy %g' % accuracy.eval(feed_dict={x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0}))
+  print('test accuracy %g' % accuracy.eval(feed_dict={x: mnist.test.images,
+                                                      y_: mnist.test.labels,
+                                                      keep_prob: 1.0}))
 
 def main(_):
   if tf.gfile.Exists(FLAGS.log_dir):
