@@ -38,13 +38,12 @@ def train():
 
   # init all variables
   tf.global_variables_initializer().run()
+  # needed on interactive session so it doesn't hang
   tf.train.start_queue_runners()
 
   for i in range(FLAGS.max_steps):
-    summary, _ = sess.run([merged_summary, train_op]) # run step
-
-    # write summaries
-    train_writer.add_summary(summary, i)
+    summary, _ = sess.run([merged_summary, train_op])
+    train_writer.add_summary(summary, i) # summary
 
     if(i % 10 == 0):
       print(loss.eval())

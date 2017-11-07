@@ -239,7 +239,6 @@ def precision_settings(step):
   return ILFLU, ILFLF, ILFLB, ofb, ofa, ofg
 
 def inference(images):
-  print('inf')
   """Build the CIFAR-10 model.
 
   Args:
@@ -326,7 +325,6 @@ def inference(images):
 
 
 def loss(logits, labels):
-  print("loss")
   """Add L2Loss to all the trainable variables.
 
   Add summary for "Loss" and "Loss/avg".
@@ -378,7 +376,6 @@ def _add_loss_summaries(total_loss):
 
 
 def train(total_loss, lr):
-  print("train")
   """Train CIFAR-10 model.
 
   Create an optimizer and apply to all trainable variables. Add moving
