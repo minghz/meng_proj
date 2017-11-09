@@ -46,7 +46,7 @@ def train():
     train_writer.add_summary(summary, i) # summary
 
     if(i % 10 == 0):
-      print(loss.eval())
+      print('Step: %s, Loss: %s' % (i, loss.eval()))
 
   train_writer.close()
 
