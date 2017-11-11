@@ -256,7 +256,8 @@ def inference(images):
   # Plot distribution of input image tensors
   with tf.name_scope('input_images'):
     tf.summary.histogram('histogram_tensors', images)
-    p1 = tf.Variable([0., 0], trainable=False)
+    p1 = tf.Variable([1., 2], trainable=False)
+
     p2 = tf.Variable([0., 0], trainable=False)
 
     of = tf.Variable([0., 0], trainable=False)

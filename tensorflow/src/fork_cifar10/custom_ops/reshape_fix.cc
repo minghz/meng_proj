@@ -6,16 +6,16 @@
 using namespace tensorflow;
 
 REGISTER_OP("ReshapeFix")
-.Input("to_round: float")
-.Input("fdefinition: float")
+.Input("to_fix: float") //input tensor
+.Input("fdefinition: float") // range and precision bits (m, n)
 .Input("bdefinition: float")
 .Input("foverflow: float")
 .Input("boverflow: float")
-.Output("roundeded: float")    
+.Output("fixed: float")    
 .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
     c->set_output(0, c->input(0));
     return Status::OK();
-    });
+});
 
 class ReshapeFixOp : public OpKernel {
   public:
@@ -24,58 +24,54 @@ class ReshapeFixOp : public OpKernel {
     void Compute(OpKernelContext* context) override {
       // Grab the input tensor
       const Tensor& input_tensor = context->input(0);
-      const Tensor& ILFL = context->input(1);
+      const Tensor& range_precision = context->input(1);
       // have to preform a const_cast to be able to pass by reference
       Tensor& foverflow = const_cast<Tensor&>(context->input(3));
 
-      auto range_precision = ILFL.flat<float>();
+      auto m_n = range_precision.flat<float>(); //range - precision
       auto input = input_tensor.flat<float>();
       auto overflow = foverflow.flat<float>();
 
-      int range = pow(2,(int)range_precision(0));
-      int precision = pow(2,(int)range_precision(1));
+      float range_min = -1 * pow(2, (m_n(0) - 1));
+      float range_max = pow(2, (m_n(0) - 1)) - pow(2, -1 * (m_n(1)));
+      float resolution = pow(2, -1 * (m_n(1)));
+
+      std::cout << "range: [" << range_min << ", " << range_max << "]"
+        << " | resolution: " << resolution
+        << std::endl;
 
       // Create an output tensor
       Tensor* output_tensor = NULL;
       OP_REQUIRES_OK(
           context,
           context->allocate_output(0, input_tensor.shape(), &output_tensor));
-
       auto output = output_tensor->flat<float>();
 
-      // round all elements to fix point.
-      const int N = input.size();
+      // convert input tensor to fixed point equivalent range
+      // and precision with a 5% resolution tolerance
+      // counts times when range is clipped, or tolerance exceeded
       int overflow_count = 0;
-      int underflow_count = 0;
-      double sum, avg = 0;
-      double tmp;
+      int unprecise_count = 0;
+      const int input_count = input.size();
+      for (int i = 0; i < input_count; i++) {
 
-      // loops through the tensor and applies fixedpoint rounding based on
-      // the given range and precision counts overflows and underflows during
-      // the process, also saves percent change in rounding
-      for (int i = 0; i < N; i++) {
-        if (input(i) > fabs(range)) {
+        // clip on max and min of allowed range
+        if (input(i) > range_max || input(i) < range_min ) {
           overflow_count++;
-          if (input(i) > range) { output(i) = (range); }
-          if (input(i) < (-range)) { output(i) = (-range); }
+          if (input(i) > range_max) { output(i) = range_max; }
+          if (input(i) < range_min) { output(i) = range_min; }
+
+        // convert resolution to fixed point equivalent
         } else {
-          output(i) = input(i)* precision;
-          output(i) =  (int)(output(i) + 0.5);
-          output(i) = output(i) / precision;
-
-          if (output(i) != input(i)) {
-            underflow_count++;
-
-            tmp = fabs((output(i) - input(i)) / input(i));
-            sum += tmp;
+          float fix_equivalent = resolution * trunc(input(i) / resolution);
+          float deviation_from_orig = abs(fix_equivalent - input(i)) / input(i);
+          if(deviation_from_orig > 0.05){ // more than 5% deviation
+            unprecise_count++;
           }
         }
       }
-      avg = sum/N;
-      // saves the percentage of elements that overflowed
-      overflow(0) += (float) (overflow_count / N);
-      // saves average percent change during rounding
-      overflow(1) = avg;   
+      overflow(0) = (float) (overflow_count / input_count);
+      overflow(1) = (float) (unprecise_count / input_count);
     }
 };
 
