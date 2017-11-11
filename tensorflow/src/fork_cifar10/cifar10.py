@@ -95,7 +95,7 @@ def variable_on_cpu(name, shape, initializer):
   """
   with tf.device('/cpu:0'):
     dtype = tf.float16 if FLAGS.use_fp16 else tf.float32
-    var = tf.get_variable(name, shape, initializer=initializer, dtype=dtype)
+    var =tf.get_variable(name, shape, initializer=initializer, dtype=dtype)
   return var
 
 
@@ -170,6 +170,7 @@ def inputs(eval_data):
   if FLAGS.use_fp16:
     images = tf.cast(images, tf.float16)
     labels = tf.cast(labels, tf.float16)
+
   return images, labels
 
 def precision_settings(step):
@@ -252,6 +253,26 @@ def inference(images):
   # If we only ran this model on a single GPU, we could simplify this function
   # by replacing all instances of tf.get_variable() with tf.Variable().
   #
+  # Plot distribution of input image tensors
+  with tf.name_scope('input_images'):
+    tf.summary.histogram('histogram_tensors', images)
+    p1 = tf.Variable([0., 0], trainable=False)
+    p2 = tf.Variable([0., 0], trainable=False)
+
+    of = tf.Variable([0., 0], trainable=False)
+    uf = tf.Variable([0., 0], trainable=False)
+    clipped_images = reshape_fix(images, p1, p2, of, uf)
+    tf.summary.scalar('p1[0]', p1[0])
+    tf.summary.scalar('p1[1]', p1[1])
+    tf.summary.scalar('p2[0]', p2[0])
+    tf.summary.scalar('p2[1]', p2[1])
+
+    tf.summary.scalar('overflow[0]', of[0])
+    tf.summary.scalar('overflow[1]', of[1])
+    tf.summary.scalar('underflow[0]', uf[0])
+    tf.summary.scalar('underflow[1]', uf[1])
+    tf.summary.histogram('clipped_images', clipped_images)
+
   # conv1
   with tf.variable_scope('conv1') as scope:
     kernel = _variable_with_weight_decay('weights',
