@@ -256,22 +256,18 @@ def inference(images):
   # Plot distribution of input image tensors
   with tf.name_scope('input_images'):
     tf.summary.histogram('histogram_tensors', images)
-    p1 = tf.Variable([1., 2], trainable=False)
 
-    p2 = tf.Variable([0., 0], trainable=False)
+    fix_def = tf.Variable([1, 2], trainable=False)
+    acc_res = tf.Variable([0., 0], trainable=False)
 
-    of = tf.Variable([0., 0], trainable=False)
-    uf = tf.Variable([0., 0], trainable=False)
-    clipped_images = reshape_fix(images, p1, p2, of, uf)
-    tf.summary.scalar('p1[0]', p1[0])
-    tf.summary.scalar('p1[1]', p1[1])
-    tf.summary.scalar('p2[0]', p2[0])
-    tf.summary.scalar('p2[1]', p2[1])
+    clipped_images = reshape_fix(images, fix_def, acc_res)
 
-    tf.summary.scalar('overflow[0]', of[0])
-    tf.summary.scalar('overflow[1]', of[1])
-    tf.summary.scalar('underflow[0]', uf[0])
-    tf.summary.scalar('underflow[1]', uf[1])
+    tf.summary.scalar('digit bits', fix_def[0])
+    tf.summary.scalar('fraction bits', fix_def[1])
+
+    tf.summary.scalar('percentage clip', (acc_res[0]))
+    tf.summary.scalar('percentage under tolerance', (acc_res[1]))
+
     tf.summary.histogram('clipped_images', clipped_images)
 
   # conv1

@@ -7,10 +7,8 @@ using namespace tensorflow;
 
 REGISTER_OP("ReshapeFix")
 .Input("to_fix: float") //input tensor
-.Input("fdefinition: float") // range and precision bits (m, n)
-.Input("bdefinition: float")
-.Input("foverflow: float")
-.Input("boverflow: float")
+.Input("fixpt_definition: int32") // range and precision bits (m, n)
+.Input("accuracy: float") // overflow or unprecise percentage
 .Output("fixed: float")    
 .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
     c->set_output(0, c->input(0));
@@ -26,11 +24,11 @@ class ReshapeFixOp : public OpKernel {
       const Tensor& input_tensor = context->input(0);
       const Tensor& range_precision = context->input(1);
       // have to preform a const_cast to be able to pass by reference
-      Tensor& foverflow = const_cast<Tensor&>(context->input(3));
+      Tensor& foverflow = const_cast<Tensor&>(context->input(2));
 
-      auto m_n = range_precision.flat<float>(); //range - precision
+      auto m_n = range_precision.flat<int>(); //range - precision
       auto input = input_tensor.flat<float>();
-      auto overflow = foverflow.flat<float>();
+      auto accuracy = foverflow.flat<float>();
 
       float range_min = -1 * pow(2, (m_n(0) - 1));
       float range_max = pow(2, (m_n(0) - 1)) - pow(2, -1 * (m_n(1)));
@@ -70,8 +68,11 @@ class ReshapeFixOp : public OpKernel {
           }
         }
       }
-      overflow(0) = (float) (overflow_count / input_count);
-      overflow(1) = (float) (unprecise_count / input_count);
+      accuracy(0) = (float)overflow_count / input_count;
+      accuracy(1) = (float)unprecise_count / input_count;
+
+      std::cout << "%over: " << accuracy(0)
+        << " %under: " << accuracy(1) << std::endl;
     }
 };
 
