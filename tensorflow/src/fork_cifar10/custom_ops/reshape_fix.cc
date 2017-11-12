@@ -34,9 +34,9 @@ class ReshapeFixOp : public OpKernel {
       float range_max = pow(2, (m_n(0) - 1)) - pow(2, -1 * (m_n(1)));
       float resolution = pow(2, -1 * (m_n(1)));
 
-      std::cout << "range: [" << range_min << ", " << range_max << "]"
-        << " | resolution: " << resolution
-        << std::endl;
+      //std::cout << "range: [" << range_min << ", " << range_max << "]"
+      //  << " | resolution: " << resolution
+      //  << std::endl;
 
       // Create an output tensor
       Tensor* output_tensor = NULL;
@@ -63,6 +63,7 @@ class ReshapeFixOp : public OpKernel {
         } else {
           float fix_equivalent = resolution * trunc(input(i) / resolution);
           float deviation_from_orig = abs(fix_equivalent - input(i)) / input(i);
+          output(i) = fix_equivalent;
           if(deviation_from_orig > 0.05){ // more than 5% deviation
             unprecise_count++;
           }
@@ -71,8 +72,8 @@ class ReshapeFixOp : public OpKernel {
       accuracy(0) = (float)overflow_count / input_count;
       accuracy(1) = (float)unprecise_count / input_count;
 
-      std::cout << "%over: " << accuracy(0)
-        << " %under: " << accuracy(1) << std::endl;
+      //std::cout << "%over: " << accuracy(0)
+      //  << " %under: " << accuracy(1) << std::endl;
     }
 };
 
