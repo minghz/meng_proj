@@ -253,22 +253,24 @@ def inference(images):
   # If we only ran this model on a single GPU, we could simplify this function
   # by replacing all instances of tf.get_variable() with tf.Variable().
   #
+  fix_def = tf.Variable([3, 5], trainable=False)
+  acc_img = tf.Variable([0., 0], trainable=False)
+  acc_c1o = tf.Variable([0., 0], trainable=False)
+  acc_c2o = tf.Variable([0., 0], trainable=False)
+  acc_l3o = tf.Variable([0., 0], trainable=False)
+  acc_l4o = tf.Variable([0., 0], trainable=False)
+  acc_sml = tf.Variable([0., 0], trainable=False)
+
+  tf.summary.scalar('digit bits', fix_def[0])
+  tf.summary.scalar('fraction bits', fix_def[1])
+
   # Plot distribution of input image tensors
   with tf.name_scope('input_images'):
     tf.summary.histogram('histogram_tensors', images)
-
-    fix_def = tf.Variable([1, 2], trainable=False)
-    acc_res = tf.Variable([0., 0], trainable=False)
-
-    clipped_images = reshape_fix(images, fix_def, acc_res)
-
-    tf.summary.scalar('digit bits', fix_def[0])
-    tf.summary.scalar('fraction bits', fix_def[1])
-
-    tf.summary.scalar('percentage clip', (acc_res[0]))
-    tf.summary.scalar('percentage under tolerance', (acc_res[1]))
-
-    tf.summary.histogram('clipped_images', clipped_images)
+    fixed_images = reshape_fix(images, fix_def, acc_img) # to fixed point
+    tf.summary.histogram('fixed_images', fixed_images)
+    tf.summary.scalar('percentage clip', (acc_img[0]))
+    tf.summary.scalar('percentage under tolerance', (acc_img[1]))
 
   # conv1
   with tf.variable_scope('conv1') as scope:
@@ -276,7 +278,7 @@ def inference(images):
                                          shape=[5, 5, 3, 64],
                                          stddev=5e-2,
                                          wd=0.0)
-    conv = tf.nn.conv2d(images, kernel, [1, 1, 1, 1], padding='SAME')
+    conv = tf.nn.conv2d(fixed_images, kernel, [1, 1, 1, 1], padding='SAME')
     biases = variable_on_cpu('biases', [64], tf.constant_initializer(0.0))
     pre_activation = tf.nn.bias_add(conv, biases)
     conv1 = tf.nn.relu(pre_activation, name=scope.name)
@@ -289,13 +291,18 @@ def inference(images):
   norm1 = tf.nn.lrn(pool1, 4, bias=1.0, alpha=0.001 / 9.0, beta=0.75,
                     name='norm1')
 
+  with tf.variable_scope('fixed_norm1'):
+    fixed_norm1 = reshape_fix(norm1, fix_def, acc_c1o) # to fixed point
+    tf.summary.scalar('percentage clip', (acc_c1o[0]))
+    tf.summary.scalar('percentage under tolerance', (acc_c1o[1]))
+
   # conv2
   with tf.variable_scope('conv2') as scope:
     kernel = _variable_with_weight_decay('weights',
                                          shape=[5, 5, 64, 64],
                                          stddev=5e-2,
                                          wd=0.0)
-    conv = tf.nn.conv2d(norm1, kernel, [1, 1, 1, 1], padding='SAME')
+    conv = tf.nn.conv2d(fixed_norm1, kernel, [1, 1, 1, 1], padding='SAME')
     biases = variable_on_cpu('biases', [64], tf.constant_initializer(0.1))
     pre_activation = tf.nn.bias_add(conv, biases)
     conv2 = tf.nn.relu(pre_activation, name=scope.name)
@@ -308,10 +315,15 @@ def inference(images):
   pool2 = tf.nn.max_pool(norm2, ksize=[1, 3, 3, 1],
                          strides=[1, 2, 2, 1], padding='SAME', name='pool2')
 
+  with tf.variable_scope('fixed_pool2'):
+    fixed_pool2 = reshape_fix(pool2, fix_def, acc_c2o) # to fixed point
+    tf.summary.scalar('percentage clip', (acc_c2o[0]))
+    tf.summary.scalar('percentage under tolerance', (acc_c2o[1]))
+
   # local3
   with tf.variable_scope('local3') as scope:
     # Move everything into depth so we can perform a single matrix multiply.
-    reshape = tf.reshape(pool2, [FLAGS.batch_size, -1])
+    reshape = tf.reshape(fixed_pool2, [FLAGS.batch_size, -1])
     dim = reshape.get_shape()[1].value
     weights = _variable_with_weight_decay('weights', shape=[dim, 384],
                                           stddev=0.04, wd=0.004)
@@ -319,13 +331,24 @@ def inference(images):
     local3 = tf.nn.relu(tf.matmul(reshape, weights) + biases, name=scope.name)
     _activation_summary(local3)
 
+  with tf.variable_scope('fixed_local3'):
+    fixed_local3 = reshape_fix(local3, fix_def, acc_l3o) # to fixed point
+    tf.summary.scalar('percentage clip', (acc_l3o[0]))
+    tf.summary.scalar('percentage under tolerance', (acc_l3o[1]))
+
   # local4
   with tf.variable_scope('local4') as scope:
     weights = _variable_with_weight_decay('weights', shape=[384, 192],
                                           stddev=0.04, wd=0.004)
     biases = variable_on_cpu('biases', [192], tf.constant_initializer(0.1))
-    local4 = tf.nn.relu(tf.matmul(local3, weights) + biases, name=scope.name)
+    local4 = tf.nn.relu(tf.matmul(fixed_local3, weights) + biases,
+            name=scope.name)
     _activation_summary(local4)
+
+  with tf.variable_scope('fixed_local4'):
+    fixed_local4 = reshape_fix(local4, fix_def, acc_l4o) # to fixed point
+    tf.summary.scalar('percentage clip', (acc_l4o[0]))
+    tf.summary.scalar('percentage under tolerance', (acc_l4o[1]))
 
   # linear layer(WX + b),
   # We don't apply softmax here because
@@ -336,10 +359,17 @@ def inference(images):
                                           stddev=1/192.0, wd=0.0)
     biases = variable_on_cpu('biases', [NUM_CLASSES],
                               tf.constant_initializer(0.0))
-    softmax_linear = tf.add(tf.matmul(local4, weights), biases, name=scope.name)
+    softmax_linear = tf.add(tf.matmul(fixed_local4, weights), biases,
+            name=scope.name)
     _activation_summary(softmax_linear)
 
-  return softmax_linear
+  with tf.variable_scope('fixed_softmax_linear'):
+    fix_def = tf.Variable([3, 5], trainable=False)
+    fixed_softmax_linear = reshape_fix(softmax_linear, fix_def, acc_sml) # to fixed point
+    tf.summary.scalar('percentage clip', (acc_sml[0]))
+    tf.summary.scalar('percentage under tolerance', (acc_sml[1]))
+
+  return fixed_softmax_linear
 
 
 def loss(logits, labels):
