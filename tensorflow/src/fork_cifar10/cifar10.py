@@ -14,6 +14,8 @@ import tensorflow as tf
 
 import cifar10_input
 
+tf.NoGradient("ReshapeFix")
+
 # use custom op to calculate gradients
 reshape_fix = tf.load_op_library('custom_ops/reshape_fix.so').reshape_fix
 
@@ -63,6 +65,23 @@ TOWER_NAME = 'tower'
 
 DATA_URL = 'http://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz'
 
+def _fixed_point_conversion_summary(x, fixed_x, acc):
+  """Helper to create summaries for fixed point conversion steps.
+
+  Creates a summary that provies a histogram of resulting tensor
+  Creates a summary that provides the percentage innacuracy of the conversion
+
+  Args:
+    x: Resulting tensor
+    acc: accuracy array
+  Returns:
+    nothing
+  """
+  tf.summary.histogram('original', x)
+  tf.summary.histogram('fixed', fixed_x)
+  tf.summary.scalar('percentage clip', (acc[0]))
+  tf.summary.scalar('percentage under tolerance', (acc[1]))
+
 
 def _activation_summary(x):
   """Helper to create summaries for activations.
@@ -80,6 +99,21 @@ def _activation_summary(x):
   tensor_name = re.sub('%s_[0-9]*/' % TOWER_NAME, '', x.op.name)
   tf.summary.histogram(tensor_name + '/activations', x)
   tf.summary.scalar(tensor_name + '/sparsity', tf.nn.zero_fraction(x))
+
+def _to_fixed_point(x, fix_def, acc):
+  """Helper method to convert tensors to fixed point accuracy
+
+  Args:
+    x: input tensor
+    fix_def: array of two ints describing #digit bits, and #fraction bits
+    acc: array of two floats describing % innaccuracy of the conversion
+  Returns:
+    fixed point accuracy equivalent tensor
+  """
+  fixed_x = reshape_fix(x, fix_def, acc)
+  _fixed_point_conversion_summary(x, fixed_x, acc)
+
+  return fixed_x
 
 
 def variable_on_cpu(name, shape, initializer):
@@ -254,23 +288,20 @@ def inference(images):
   # by replacing all instances of tf.get_variable() with tf.Variable().
   #
   fix_def = tf.Variable([3, 5], trainable=False)
-  acc_img = tf.Variable([0., 0], trainable=False)
-  acc_c1o = tf.Variable([0., 0], trainable=False)
-  acc_c2o = tf.Variable([0., 0], trainable=False)
-  acc_l3o = tf.Variable([0., 0], trainable=False)
-  acc_l4o = tf.Variable([0., 0], trainable=False)
-  acc_sml = tf.Variable([0., 0], trainable=False)
+  acc_img = tf.Variable([0., 0.], trainable=False)
+  acc_c1o = tf.Variable([0., 0.], trainable=False)
+  acc_c2o = tf.Variable([0., 0.], trainable=False)
+  acc_l3o = tf.Variable([0., 0.], trainable=False)
+  acc_l4o = tf.Variable([0., 0.], trainable=False)
+  acc_sml = tf.Variable([0., 0.], trainable=False)
 
   tf.summary.scalar('digit bits', fix_def[0])
   tf.summary.scalar('fraction bits', fix_def[1])
 
   # Plot distribution of input image tensors
   with tf.name_scope('input_images'):
-    tf.summary.histogram('histogram_tensors', images)
-    fixed_images = reshape_fix(images, fix_def, acc_img) # to fixed point
-    tf.summary.histogram('fixed_images', fixed_images)
-    tf.summary.scalar('percentage clip', (acc_img[0]))
-    tf.summary.scalar('percentage under tolerance', (acc_img[1]))
+    fixed_images = _to_fixed_point(images, fix_def, acc_img)
+
 
   # conv1
   with tf.variable_scope('conv1') as scope:
@@ -284,17 +315,14 @@ def inference(images):
     conv1 = tf.nn.relu(pre_activation, name=scope.name)
     _activation_summary(conv1)
 
-  # pool1
-  pool1 = tf.nn.max_pool(conv1, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1],
-                         padding='SAME', name='pool1')
-  # norm1
-  norm1 = tf.nn.lrn(pool1, 4, bias=1.0, alpha=0.001 / 9.0, beta=0.75,
-                    name='norm1')
+    # pool1
+    pool1 = tf.nn.max_pool(conv1, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1],
+                           padding='SAME', name='pool1')
+    # norm1
+    norm1 = tf.nn.lrn(pool1, 4, bias=1.0, alpha=0.001 / 9.0, beta=0.75,
+                      name='norm1')
 
-  with tf.variable_scope('fixed_norm1'):
-    fixed_norm1 = reshape_fix(norm1, fix_def, acc_c1o) # to fixed point
-    tf.summary.scalar('percentage clip', (acc_c1o[0]))
-    tf.summary.scalar('percentage under tolerance', (acc_c1o[1]))
+    fixed_norm1 = _to_fixed_point(norm1, fix_def, acc_c1o)
 
   # conv2
   with tf.variable_scope('conv2') as scope:
@@ -308,17 +336,14 @@ def inference(images):
     conv2 = tf.nn.relu(pre_activation, name=scope.name)
     _activation_summary(conv2)
 
-  # norm2
-  norm2 = tf.nn.lrn(conv2, 4, bias=1.0, alpha=0.001 / 9.0, beta=0.75,
-                    name='norm2')
-  # pool2
-  pool2 = tf.nn.max_pool(norm2, ksize=[1, 3, 3, 1],
-                         strides=[1, 2, 2, 1], padding='SAME', name='pool2')
+    # norm2
+    norm2 = tf.nn.lrn(conv2, 4, bias=1.0, alpha=0.001 / 9.0, beta=0.75,
+                      name='norm2')
+    # pool2
+    pool2 = tf.nn.max_pool(norm2, ksize=[1, 3, 3, 1],
+                           strides=[1, 2, 2, 1], padding='SAME', name='pool2')
 
-  with tf.variable_scope('fixed_pool2'):
-    fixed_pool2 = reshape_fix(pool2, fix_def, acc_c2o) # to fixed point
-    tf.summary.scalar('percentage clip', (acc_c2o[0]))
-    tf.summary.scalar('percentage under tolerance', (acc_c2o[1]))
+    fixed_pool2 = _to_fixed_point(pool2, fix_def, acc_c2o)
 
   # local3
   with tf.variable_scope('local3') as scope:
@@ -331,10 +356,7 @@ def inference(images):
     local3 = tf.nn.relu(tf.matmul(reshape, weights) + biases, name=scope.name)
     _activation_summary(local3)
 
-  with tf.variable_scope('fixed_local3'):
-    fixed_local3 = reshape_fix(local3, fix_def, acc_l3o) # to fixed point
-    tf.summary.scalar('percentage clip', (acc_l3o[0]))
-    tf.summary.scalar('percentage under tolerance', (acc_l3o[1]))
+    fixed_local3 = _to_fixed_point(local3, fix_def, acc_l3o)
 
   # local4
   with tf.variable_scope('local4') as scope:
@@ -345,10 +367,7 @@ def inference(images):
             name=scope.name)
     _activation_summary(local4)
 
-  with tf.variable_scope('fixed_local4'):
-    fixed_local4 = reshape_fix(local4, fix_def, acc_l4o) # to fixed point
-    tf.summary.scalar('percentage clip', (acc_l4o[0]))
-    tf.summary.scalar('percentage under tolerance', (acc_l4o[1]))
+    fixed_local4 = _to_fixed_point(local4, fix_def, acc_l4o)
 
   # linear layer(WX + b),
   # We don't apply softmax here because
@@ -363,11 +382,7 @@ def inference(images):
             name=scope.name)
     _activation_summary(softmax_linear)
 
-  with tf.variable_scope('fixed_softmax_linear'):
-    fix_def = tf.Variable([3, 5], trainable=False)
-    fixed_softmax_linear = reshape_fix(softmax_linear, fix_def, acc_sml) # to fixed point
-    tf.summary.scalar('percentage clip', (acc_sml[0]))
-    tf.summary.scalar('percentage under tolerance', (acc_sml[1]))
+    fixed_softmax_linear = _to_fixed_point(softmax_linear, fix_def, acc_sml)
 
   return fixed_softmax_linear
 
