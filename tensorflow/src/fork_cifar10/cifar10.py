@@ -72,7 +72,8 @@ def _fixed_point_conversion_summary(x, fixed_x, acc):
   Creates a summary that provides the percentage innacuracy of the conversion
 
   Args:
-    x: Resulting tensor
+    x: original tensor
+    fixed_x: Resulting tensor
     acc: accuracy array
   Returns:
     nothing
