@@ -49,10 +49,11 @@ def train():
   tf.train.start_queue_runners()
 
   for i in range(FLAGS.max_steps):
-    summary, _, _ = sess.run([merged_summary, train_op, update_fix_pt_ops])
+    summary, _ = sess.run([merged_summary, train_op])
     train_writer.add_summary(summary, i) # summary
 
     if(i % 10 == 0):
+      sess.run([update_fix_pt_ops])
       print('Step: %s, Loss: %s' % (i, loss.eval()))
 
   train_writer.close()
