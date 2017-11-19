@@ -101,16 +101,19 @@ def _activation_summary(x):
   tf.summary.histogram(tensor_name + '/activations', x)
   tf.summary.scalar(tensor_name + '/sparsity', tf.nn.zero_fraction(x))
 
-def _to_fixed_point(x, fix_def, acc):
+def _to_fixed_point(x, fix_def, scope, acc_name):
   """Helper method to convert tensors to fixed point accuracy
 
   Args:
     x: input tensor
     fix_def: array of two ints describing #digit bits, and #fraction bits
-    acc: array of two floats describing % innaccuracy of the conversion
+    acc_name: name of tensor describing % innaccuracy of the conversion
   Returns:
     fixed point accuracy equivalent tensor
   """
+  scope.reuse_variables()
+  acc = tf.get_variable(acc_name, initializer=[0., 0.], trainable=False)
+
   fixed_x = reshape_fix(x, fix_def, acc)
   _fixed_point_conversion_summary(x, fixed_x, acc)
 
@@ -130,7 +133,7 @@ def variable_on_cpu(name, shape, initializer):
   """
   with tf.device('/cpu:0'):
     dtype = tf.float16 if FLAGS.use_fp16 else tf.float32
-    var =tf.get_variable(name, shape, initializer=initializer, dtype=dtype)
+    var = tf.get_variable(name, shape, initializer=initializer, dtype=dtype)
   return var
 
 
@@ -274,7 +277,37 @@ def precision_settings(step):
 
   return ILFLU, ILFLF, ILFLB, ofb, ofa, ofg
 
-def inference(images):
+def update_accuracy(initial_accuracy):
+  """Update the fixed point variable accuracy if required
+
+  Args:
+    initial_accuracy: [2] shape tensor representing % overflow and %under tolerance
+
+  Returns:
+    Nothing
+  """
+
+  with tf.variable_scope('fix_def'):
+    fix_def = tf.get_variable('fix_def', initializer=initial_accuracy, trainable=False)
+    tf.summary.scalar('digit bits', fix_def[0])
+    tf.summary.scalar('fraction bits', fix_def[1])
+
+  acc_output_names = ['input_images/acc_img', 'conv1/acc_c1o', 'conv2/acc_c2o',
+                      'local3/acc_l3o', 'local4/acc_l4o', 'softmax_linear/acc_sml']
+
+  for acc_name in acc_output_names:
+    scope, name = acc_name.split('/')
+    with tf.variable_scope(scope):
+      # 5% clip, lets give it one more bit
+      acc = tf.get_variable(name, initializer=[0., 0.], trainable=False)
+      fix_def = tf.cond(acc[0] > 0.05, # overflow clipped
+              lambda: tf.assign_add(fix_def, [1, 0]), lambda: tf.assign_add(fix_def, [0, 0]))
+      fix_def = tf.cond(acc[1] > 0.05, # under tolerance
+              lambda: tf.assign_add(fix_def, [0, 1]), lambda: tf.assign_add(fix_def, [0, 0]))
+
+  return fix_def
+
+def inference(images, fix_def):
   """Build the CIFAR-10 model.
 
   Args:
@@ -288,20 +321,9 @@ def inference(images):
   # If we only ran this model on a single GPU, we could simplify this function
   # by replacing all instances of tf.get_variable() with tf.Variable().
   #
-  fix_def = tf.Variable([3, 5], trainable=False)
-  acc_img = tf.Variable([0., 0.], trainable=False)
-  acc_c1o = tf.Variable([0., 0.], trainable=False)
-  acc_c2o = tf.Variable([0., 0.], trainable=False)
-  acc_l3o = tf.Variable([0., 0.], trainable=False)
-  acc_l4o = tf.Variable([0., 0.], trainable=False)
-  acc_sml = tf.Variable([0., 0.], trainable=False)
-
-  tf.summary.scalar('digit bits', fix_def[0])
-  tf.summary.scalar('fraction bits', fix_def[1])
-
   # Plot distribution of input image tensors
-  with tf.name_scope('input_images'):
-    fixed_images = _to_fixed_point(images, fix_def, acc_img)
+  with tf.variable_scope('input_images', reuse=True) as scope:
+    fixed_images = _to_fixed_point(images, fix_def, scope, 'acc_img')
 
 
   # conv1
@@ -323,7 +345,7 @@ def inference(images):
     norm1 = tf.nn.lrn(pool1, 4, bias=1.0, alpha=0.001 / 9.0, beta=0.75,
                       name='norm1')
 
-    fixed_norm1 = _to_fixed_point(norm1, fix_def, acc_c1o)
+    fixed_norm1 = _to_fixed_point(norm1, fix_def, scope, 'acc_c1o')
 
   # conv2
   with tf.variable_scope('conv2') as scope:
@@ -344,7 +366,7 @@ def inference(images):
     pool2 = tf.nn.max_pool(norm2, ksize=[1, 3, 3, 1],
                            strides=[1, 2, 2, 1], padding='SAME', name='pool2')
 
-    fixed_pool2 = _to_fixed_point(pool2, fix_def, acc_c2o)
+    fixed_pool2 = _to_fixed_point(pool2, fix_def, scope, 'acc_c2o')
 
   # local3
   with tf.variable_scope('local3') as scope:
@@ -357,7 +379,7 @@ def inference(images):
     local3 = tf.nn.relu(tf.matmul(reshape, weights) + biases, name=scope.name)
     _activation_summary(local3)
 
-    fixed_local3 = _to_fixed_point(local3, fix_def, acc_l3o)
+    fixed_local3 = _to_fixed_point(local3, fix_def, scope, 'acc_l3o')
 
   # local4
   with tf.variable_scope('local4') as scope:
@@ -368,7 +390,7 @@ def inference(images):
             name=scope.name)
     _activation_summary(local4)
 
-    fixed_local4 = _to_fixed_point(local4, fix_def, acc_l4o)
+    fixed_local4 = _to_fixed_point(local4, fix_def, scope, 'acc_l4o')
 
   # linear layer(WX + b),
   # We don't apply softmax here because
@@ -383,7 +405,7 @@ def inference(images):
             name=scope.name)
     _activation_summary(softmax_linear)
 
-    fixed_softmax_linear = _to_fixed_point(softmax_linear, fix_def, acc_sml)
+    fixed_softmax_linear = _to_fixed_point(softmax_linear, fix_def, scope, 'acc_sml')
 
   return fixed_softmax_linear
 
