@@ -78,3 +78,4 @@ class ReshapeFixOp : public OpKernel {
 };
 
 REGISTER_KERNEL_BUILDER(Name("ReshapeFix").Device(DEVICE_CPU), ReshapeFixOp);
+

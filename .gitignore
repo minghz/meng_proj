@@ -1,4 +1,6 @@
 tensorflow/src/fork_cifar10/__pycache__/
+tensorflow/src/fork_cifar10/logs
+
 tensorflow/src/Summer17Research/
 tensorflow/src/models/
 tensorflow/bin/
@@ -8,3 +10,5 @@ tensorflow/lib/
 tensorflow/lib64
 tensorflow/pip-selfcheck.json
 tensorflow/src/learning/summaries/
+
+source/

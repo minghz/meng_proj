@@ -1,4 +1,5 @@
 import tensorflow as tf
+#from tensorflow.python import debug as tf_debug
 
 import os
 import cifar10 # library of functions
@@ -16,12 +17,14 @@ def train():
   sess = tf.InteractiveSession()
 
   # Get images and labels for CIFAR-10.
-
   with tf.device('/cpu:0'):
     images, labels = cifar10.distorted_inputs()
 
+  # Update fixed point conversion parameters when needed
+  fix_pt_definition = cifar10.update_accuracy([1, 1])
+
   # Build a Graph that computes the logits predictions from the inference model
-  logits = cifar10.inference(images)
+  logits = cifar10.inference(images, fix_pt_definition)
 
   # Calculate loss.
   loss = cifar10.loss(logits, labels)
@@ -44,9 +47,14 @@ def train():
   for i in range(FLAGS.max_steps):
     summary, _ = sess.run([merged_summary, train_op])
     train_writer.add_summary(summary, i) # summary
-
+    with tf.variable_scope('fix_def', reuse=True):
+        fix_def2 = tf.get_variable('fix_def', [2], dtype=tf.int32)
+        print ('step: ', i, 'fix_def: ', fix_def2.eval())
     if(i % 10 == 0):
       print('Step: %s, Loss: %s' % (i, loss.eval()))
+      fix_def = sess.run([fix_pt_definition])
+      print ('step: ', i, 'fix_def: ', fix_def)
+      
 
   train_writer.close()
 
