@@ -65,7 +65,7 @@ TOWER_NAME = 'tower'
 
 DATA_URL = 'http://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz'
 
-def _fixed_point_conversion_summary(x, fixed_x, acc):
+def _fixed_point_conversion_summary(x, fixed_x, fix_def, acc):
   """Helper to create summaries for fixed point conversion steps.
 
   Creates a summary that provies a histogram of resulting tensor
@@ -74,14 +74,21 @@ def _fixed_point_conversion_summary(x, fixed_x, acc):
   Args:
     x: original tensor
     fixed_x: Resulting tensor
+    fix_def: fix point definition for this conversion
     acc: accuracy array
   Returns:
     nothing
   """
+  with tf.variable_scope('fix_def'):
+    tf.summary.scalar('digit bits', fix_def[0])
+    tf.summary.scalar('fraction bits', fix_def[1])
+
+  with tf.variable_scope('acc'):
+    tf.summary.scalar('percentage clip', (acc[0]))
+    tf.summary.scalar('percentage under tolerance', (acc[1]))
+
   tf.summary.histogram('original', x)
   tf.summary.histogram('fixed', fixed_x)
-  tf.summary.scalar('percentage clip', (acc[0]))
-  tf.summary.scalar('percentage under tolerance', (acc[1]))
 
 
 def _activation_summary(x):
@@ -101,21 +108,22 @@ def _activation_summary(x):
   tf.summary.histogram(tensor_name + '/activations', x)
   tf.summary.scalar(tensor_name + '/sparsity', tf.nn.zero_fraction(x))
 
-def _to_fixed_point(x, fix_def, scope, acc_name):
+
+def _to_fixed_point(x, scope):
   """Helper method to convert tensors to fixed point accuracy
 
   Args:
     x: input tensor
-    fix_def: array of two ints describing #digit bits, and #fraction bits
-    acc_name: name of tensor describing % innaccuracy of the conversion
+    scope: variable scope that is being converted
   Returns:
     fixed point accuracy equivalent tensor
   """
   scope.reuse_variables()
-  acc = tf.get_variable(acc_name, initializer=[0., 0.], trainable=False)
+  fix_def = tf.get_variable('fix_def', initializer=[1, 1], dtype=tf.int32, trainable=False)
+  acc = tf.get_variable('acc', [2], trainable=False)
 
   fixed_x = reshape_fix(x, fix_def, acc)
-  _fixed_point_conversion_summary(x, fixed_x, acc)
+  _fixed_point_conversion_summary(x, fixed_x, fix_def, acc)
 
   return fixed_x
 
@@ -211,103 +219,52 @@ def inputs(eval_data):
 
   return images, labels
 
-def precision_settings(step):
-  """According to the overal step of the training, we want to slowly
-  increment the precision of our variables """
 
-  ILFLU = tf.get_variable('ILFLU', [2], trainable=False)
-  ILFLF = tf.get_variable('ILFLF', [2], trainable=False)
-  ILFLB = tf.get_variable('ILFLB', [2], trainable=False)
+def initialize_fix_point_variables():
+  """Initialize the variables for fixed point conversion
+  """
+  # The output of the major layers that we want to convert to fixed point precision
+  scope_names = ['input_images', 'conv1', 'conv2', 'local3', 'local4', 'softmax_linear']
+  for scope_name in scope_names:
+    with tf.variable_scope(scope_name):
+      # Fixed point nunmber precision settings
+      fix_def = tf.get_variable('fix_def', initializer=[1, 1], trainable=False)
 
-  ofw = tf.get_variable('ofW', [2], trainable=False)
-  ofb = tf.get_variable('ofB', [2], trainable=False)
-  ofa = tf.get_variable('ofA', [2], trainable=False)
-  ofg = tf.get_variable('ofG', [2], trainable=False)
+      # Fixed point precision adjustments
+      # Assigning more or less digit/fraction bits to fixed point number
+      acc = tf.get_variable('acc', initializer=[0., 0.], trainable=False)
 
-  if(step < 50): #setup
-    if ((ofw[0] > 0) or (ofb[0] > 0)):
-      if (ILFLU[1] > 0):
-        ILFLU = tf.add(ILFLU, [1, -1])
-      else:
-        ILFLU = tf.add(ILFLU, [1, 0])
 
-      ofw = [0, ofw[1]]
-      ofb = [0, ofb[1]]
-
-    if (ofg[0] > 0):
-      if (ILFLB[1] > 0):
-        ILFLB = tf.add(ILFLB,[1,-1])
-      else:
-        ILFLB = tf.add(ILFLB,[1,0])
-
-      ofg = [0, ofg[1]]
-
-    if (ofa[0] > 0):
-      if (ILFLF[1] > 0):
-        ILFLF = tf.add(ILFLF, [1, -1])
-      else:
-        ILFLF = tf.add(ILFLF, [1, 0])
-
-      ofa = [0, ofa[1]]
-
-  # wait until training is "stabalized"
-  # then reduce the precision to target length
-  elif (i == 50):
-    ILFLU = [ILFLU[0], 10 - ILFLU[0]]
-    ILFLB = [ILFLB[0], 10 - ILFLB[0]]
-    ILFLF = [ILFLF[0], 10 - ILFLF[0]]
-
-  # increase the precision of the variable catagory
-  # that exceeded the underflow threshold
-  elif (i < FLAGS.max_steps - 100):
-    if (ofw[1] > 0.05 or ofb[1] > 0.05):
-      ILFLU[1] += 1
-
-    if (ofa[1] > 0.05):
-      ILFLF[1] += 1
-
-    if (ofg[1] > 0.05):
-      ILFLB[1] += 1
-
-  #change precision to final_length for the final_steps of training
-  elif (i == FLAGS.max_steps - 100):
-    ILFLU = [ILFLU[0], 30 - ILFLU[0]]
-    ILFLB = [ILFLB[0], 30 - ILFLB[0]]
-    ILFLF = [ILFLF[0], 30 - ILFLF[0]]
-
-  return ILFLU, ILFLF, ILFLB, ofb, ofa, ofg
-
-def update_accuracy(initial_accuracy):
+def update_fix_point_accuracy():
   """Update the fixed point variable accuracy if required
 
-  Args:
-    initial_accuracy: [2] shape tensor representing % overflow and %under tolerance
-
   Returns:
-    Nothing
+    update_ops: list of operations that updates the fix_def of all layers
   """
+  update_ops = []
+  scope_names = ['input_images', 'conv1', 'conv2', 'local3', 'local4', 'softmax_linear']
+  for scope_name in scope_names:
+    with tf.variable_scope(scope_name, reuse=True):
+      fix_def = tf.get_variable('fix_def', [2], dtype=tf.int32)
+      acc = tf.get_variable('acc', [2])
 
-  with tf.variable_scope('fix_def'):
-    fix_def = tf.get_variable('fix_def', initializer=initial_accuracy, trainable=False)
-    tf.summary.scalar('digit bits', fix_def[0])
-    tf.summary.scalar('fraction bits', fix_def[1])
+      fix_def = tf.cond(
+        acc[0] > 0.05, # overflow clipped
+        lambda: tf.assign_add(fix_def, [1, 0]),
+        lambda: tf.assign_add(fix_def, [0, 0])
+      )
 
-  acc_output_names = ['input_images/acc_img', 'conv1/acc_c1o', 'conv2/acc_c2o',
-                      'local3/acc_l3o', 'local4/acc_l4o', 'softmax_linear/acc_sml']
+      fix_def = tf.cond(
+        acc[1] > 0.05, # under tolerance
+          lambda: tf.assign_add(fix_def, [0, 1]),
+          lambda: tf.assign_add(fix_def, [0, 0])
+      )
+      update_ops.append(fix_def)
 
-  for acc_name in acc_output_names:
-    scope, name = acc_name.split('/')
-    with tf.variable_scope(scope):
-      # 5% clip, lets give it one more bit
-      acc = tf.get_variable(name, initializer=[0., 0.], trainable=False)
-      fix_def = tf.cond(acc[0] > 0.05, # overflow clipped
-              lambda: tf.assign_add(fix_def, [1, 0]), lambda: tf.assign_add(fix_def, [0, 0]))
-      fix_def = tf.cond(acc[1] > 0.05, # under tolerance
-              lambda: tf.assign_add(fix_def, [0, 1]), lambda: tf.assign_add(fix_def, [0, 0]))
+  return update_ops
 
-  return fix_def
 
-def inference(images, fix_def):
+def inference(images):
   """Build the CIFAR-10 model.
 
   Args:
@@ -323,8 +280,7 @@ def inference(images, fix_def):
   #
   # Plot distribution of input image tensors
   with tf.variable_scope('input_images', reuse=True) as scope:
-    fixed_images = _to_fixed_point(images, fix_def, scope, 'acc_img')
-
+    fixed_images = _to_fixed_point(images, scope)
 
   # conv1
   with tf.variable_scope('conv1') as scope:
@@ -345,7 +301,7 @@ def inference(images, fix_def):
     norm1 = tf.nn.lrn(pool1, 4, bias=1.0, alpha=0.001 / 9.0, beta=0.75,
                       name='norm1')
 
-    fixed_norm1 = _to_fixed_point(norm1, fix_def, scope, 'acc_c1o')
+    fixed_norm1 = _to_fixed_point(norm1, scope)
 
   # conv2
   with tf.variable_scope('conv2') as scope:
@@ -366,7 +322,7 @@ def inference(images, fix_def):
     pool2 = tf.nn.max_pool(norm2, ksize=[1, 3, 3, 1],
                            strides=[1, 2, 2, 1], padding='SAME', name='pool2')
 
-    fixed_pool2 = _to_fixed_point(pool2, fix_def, scope, 'acc_c2o')
+    fixed_pool2 = _to_fixed_point(pool2, scope)
 
   # local3
   with tf.variable_scope('local3') as scope:
@@ -379,7 +335,7 @@ def inference(images, fix_def):
     local3 = tf.nn.relu(tf.matmul(reshape, weights) + biases, name=scope.name)
     _activation_summary(local3)
 
-    fixed_local3 = _to_fixed_point(local3, fix_def, scope, 'acc_l3o')
+    fixed_local3 = _to_fixed_point(local3, scope)
 
   # local4
   with tf.variable_scope('local4') as scope:
@@ -390,7 +346,7 @@ def inference(images, fix_def):
             name=scope.name)
     _activation_summary(local4)
 
-    fixed_local4 = _to_fixed_point(local4, fix_def, scope, 'acc_l4o')
+    fixed_local4 = _to_fixed_point(local4, scope)
 
   # linear layer(WX + b),
   # We don't apply softmax here because
@@ -401,11 +357,11 @@ def inference(images, fix_def):
                                           stddev=1/192.0, wd=0.0)
     biases = variable_on_cpu('biases', [NUM_CLASSES],
                               tf.constant_initializer(0.0))
-    softmax_linear = tf.add(tf.matmul(fixed_local4, weights), biases,
-            name=scope.name)
+    softmax_linear = tf.add(tf.matmul(fixed_local4, weights),
+            biases, name=scope.name)
     _activation_summary(softmax_linear)
 
-    fixed_softmax_linear = _to_fixed_point(softmax_linear, fix_def, scope, 'acc_sml')
+    fixed_softmax_linear = _to_fixed_point(softmax_linear, scope)
 
   return fixed_softmax_linear
 
@@ -529,3 +485,70 @@ def maybe_download_and_extract():
   extracted_dir_path = os.path.join(dest_directory, 'cifar-10-batches-bin')
   if not os.path.exists(extracted_dir_path):
     tarfile.open(filepath, 'r:gz').extractall(dest_directory)
+
+
+#def precision_settings(step):
+#  """According to the overal step of the training, we want to slowly
+#  increment the precision of our variables """
+#
+#  ILFLU = tf.get_variable('ILFLU', [2], trainable=False)
+#  ILFLF = tf.get_variable('ILFLF', [2], trainable=False)
+#  ILFLB = tf.get_variable('ILFLB', [2], trainable=False)
+#
+#  ofw = tf.get_variable('ofW', [2], trainable=False)
+#  ofb = tf.get_variable('ofB', [2], trainable=False)
+#  ofa = tf.get_variable('ofA', [2], trainable=False)
+#  ofg = tf.get_variable('ofG', [2], trainable=False)
+#
+#  if(step < 50): #setup
+#    if ((ofw[0] > 0) or (ofb[0] > 0)):
+#      if (ILFLU[1] > 0):
+#        ILFLU = tf.add(ILFLU, [1, -1])
+#      else:
+#        ILFLU = tf.add(ILFLU, [1, 0])
+#
+#      ofw = [0, ofw[1]]
+#      ofb = [0, ofb[1]]
+#
+#    if (ofg[0] > 0):
+#      if (ILFLB[1] > 0):
+#        ILFLB = tf.add(ILFLB,[1,-1])
+#      else:
+#        ILFLB = tf.add(ILFLB,[1,0])
+#
+#      ofg = [0, ofg[1]]
+#
+#    if (ofa[0] > 0):
+#      if (ILFLF[1] > 0):
+#        ILFLF = tf.add(ILFLF, [1, -1])
+#      else:
+#        ILFLF = tf.add(ILFLF, [1, 0])
+#
+#      ofa = [0, ofa[1]]
+#
+#  # wait until training is "stabalized"
+#  # then reduce the precision to target length
+#  elif (i == 50):
+#    ILFLU = [ILFLU[0], 10 - ILFLU[0]]
+#    ILFLB = [ILFLB[0], 10 - ILFLB[0]]
+#    ILFLF = [ILFLF[0], 10 - ILFLF[0]]
+#
+#  # increase the precision of the variable catagory
+#  # that exceeded the underflow threshold
+#  elif (i < FLAGS.max_steps - 100):
+#    if (ofw[1] > 0.05 or ofb[1] > 0.05):
+#      ILFLU[1] += 1
+#
+#    if (ofa[1] > 0.05):
+#      ILFLF[1] += 1
+#
+#    if (ofg[1] > 0.05):
+#      ILFLB[1] += 1
+#
+#  #change precision to final_length for the final_steps of training
+#  elif (i == FLAGS.max_steps - 100):
+#    ILFLU = [ILFLU[0], 30 - ILFLU[0]]
+#    ILFLB = [ILFLB[0], 30 - ILFLB[0]]
+#    ILFLF = [ILFLF[0], 30 - ILFLF[0]]
+#
+#  return ILFLU, ILFLF, ILFLB, ofb, ofa, ofg

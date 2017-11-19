@@ -15,16 +15,17 @@ parser = cifar10.parser
 def train():
   """Train CIFAR-10 for a number of steps."""
   sess = tf.InteractiveSession()
+  #sess = tf_debug.LocalCLIDebugWrapperSession(sess)
 
   # Get images and labels for CIFAR-10.
   with tf.device('/cpu:0'):
     images, labels = cifar10.distorted_inputs()
 
-  # Update fixed point conversion parameters when needed
-  fix_pt_definition = cifar10.update_accuracy([1, 1])
+  # Define all the fixed point variables we will be using later
+  cifar10.initialize_fix_point_variables()
 
   # Build a Graph that computes the logits predictions from the inference model
-  logits = cifar10.inference(images, fix_pt_definition)
+  logits = cifar10.inference(images)
 
   # Calculate loss.
   loss = cifar10.loss(logits, labels)
@@ -32,6 +33,9 @@ def train():
   # Build a Graph that trains the model with one batch of examples and
   # updates the model parameters.
   train_op = cifar10.train(loss, 0.05)
+
+  # Update fixed point conversion parameters when needed
+  update_fix_pt_ops = cifar10.update_fix_point_accuracy()
 
   # Merge all the summaries and write them out to
   # FLAGS.log_dir
@@ -47,14 +51,10 @@ def train():
   for i in range(FLAGS.max_steps):
     summary, _ = sess.run([merged_summary, train_op])
     train_writer.add_summary(summary, i) # summary
-    with tf.variable_scope('fix_def', reuse=True):
-        fix_def2 = tf.get_variable('fix_def', [2], dtype=tf.int32)
-        print ('step: ', i, 'fix_def: ', fix_def2.eval())
+
     if(i % 10 == 0):
+      sess.run([update_fix_pt_ops])
       print('Step: %s, Loss: %s' % (i, loss.eval()))
-      fix_def = sess.run([fix_pt_definition])
-      print ('step: ', i, 'fix_def: ', fix_def)
-      
 
   train_writer.close()
 
