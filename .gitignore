@@ -12,3 +12,6 @@ tensorflow/pip-selfcheck.json
 tensorflow/src/learning/summaries/
 
 source/
+
+# no swap files
+*.swp
