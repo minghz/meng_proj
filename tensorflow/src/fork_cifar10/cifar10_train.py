@@ -19,7 +19,14 @@ def train():
 
   # Get images and labels for CIFAR-10.
   with tf.device('/cpu:0'):
-    images, labels = cifar10.distorted_inputs()
+    images = tf.placeholder(tf.float32,
+            [FLAGS.batch_size,
+            cifar10.IMAGE_SIZE, cifar10.IMAGE_SIZE, 3],
+            name='input-images')
+
+    labels = tf.placeholder(tf.int32,
+            [FLAGS.batch_size],
+            name='input-labels')
 
   # Define all the fixed point variables we will be using later
   cifar10.initialize_fix_point_variables()
@@ -37,6 +44,9 @@ def train():
   # Update fixed point conversion parameters when needed
   update_fix_pt_ops = cifar10.update_fix_point_accuracy()
 
+  # Evaluate performance
+  top_k_op = tf.nn.in_top_k(logits, labels, 1)
+
   # Merge all the summaries and write them out to
   # FLAGS.log_dir
   merged_summary = tf.summary.merge_all()
@@ -48,15 +58,49 @@ def train():
   # needed on interactive session so it doesn't hang
   tf.train.start_queue_runners()
 
+  def feed(train):
+    print('in feed')
+    if train: # training data
+      print('in train')
+      images, labels = cifar10.distorted_inputs()
+    else: # testing data
+      images, labels = cifar10.inputs(eval_data=eval_data)
+
+    print('about to return')
+    return {images: images.eval(session=sess), labels: labels.eval(session=sess)}
+
   for i in range(FLAGS.max_steps):
-    summary, _ = sess.run([merged_summary, train_op])
+    print('before run')
+    summary, _ = sess.run([merged_summary, train_op], feed_dict=feed(True))
+    print('returned')
     train_writer.add_summary(summary, i) # summary
+    print('wrote summary')
 
     if(i % 10 == 0):
+      # updating fixed point accuracies
       sess.run([update_fix_pt_ops])
       print('Step: %s, Loss: %s' % (i, loss.eval()))
 
+      # running tests to check accuracy
+      num_iter = int(math.ceil(FLAGS.num_examples / FLAGS.batch_size))
+      true_count = 0  # Counts the number of correct predictions.
+      total_sample_count = num_iter * FLAGS.batch_size
+      step = 0
+      while step < num_iter:
+        summary, predictions = sess.run([merged_summary, top_k_op], feed_dict=feed(False))
+        true_count += np.sum(predictions)
+        step += 1
+  
+      # Compute precision @ 1.
+      precision = true_count / total_sample_count
+      print('%s: precision @ 1 = %.3f' % (datetime.now(), precision))
+      
+      summary.value.add(tag='Precision @ 1', simple_value=precision)
+      test_writer.add_summary(summary, i)
+
   train_writer.close()
+  test_writer.close()
+
 
 def main(argv=None):  # pylint: disable=unused-argument
   cifar10.maybe_download_and_extract()

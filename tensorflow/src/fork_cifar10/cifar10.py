@@ -43,6 +43,25 @@ parser.add_argument('--log_device_placement', type=bool, default=False,
 parser.add_argument('--log_frequency', type=int, default=10,
                     help='How often to log results to the console.')
 
+# arguments for evaluation (testing)
+parser.add_argument('--eval_dir', type=str, default='/tmp/cifar10_fix_eval',
+                    help='Directory where to write event logs.')
+
+parser.add_argument('--eval_data', type=str, default='test',
+                    help='Either `test` or `train_eval`.')
+
+parser.add_argument('--checkpoint_dir', type=str, default='/tmp/cifar10_fix_train',
+                    help='Directory where to read model checkpoints.')
+
+parser.add_argument('--eval_interval_secs', type=int, default=60*5,
+                    help='How often to run the eval.')
+
+parser.add_argument('--num_examples', type=int, default=10000,
+                    help='Number of examples to run.')
+
+parser.add_argument('--run_once', type=bool, default=False,
+                    help='Whether to run eval only once.')
+
 FLAGS = parser.parse_args()
 
 # Global constants describing the CIFAR-10 data set.
@@ -465,6 +484,17 @@ def train(total_loss, lr):
 
   return train_op
 
+
+def eval_once(sess, i, summary_writer, top_k_op, summary_op):
+  """Run Eval once.
+
+  Args:
+    sess: Session.
+    i: Step number.
+    summary_writer: Summary writer.
+    top_k_op: Top K op.
+    summary_op: Summary op.
+  """
 
 def maybe_download_and_extract():
   """Download and extract the tarball from Alex's website."""

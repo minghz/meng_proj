@@ -16,11 +16,11 @@
 """Evaluation for CIFAR-10.
 
 Accuracy:
-cifar10_fix_train.py achieves 83.0% accuracy after 100K steps (256 epochs
-of data) as judged by cifar10_fix_eval.py.
+cifar10_train.py achieves 83.0% accuracy after 100K steps (256 epochs
+of data) as judged by cifar10_eval.py.
 
 Speed:
-On a single Tesla K40, cifar10_fix_train.py processes a single batch of 128 images
+On a single Tesla K40, cifar10_train.py processes a single batch of 128 images
 in 0.25-0.35 sec (i.e. 350 - 600 images /sec). The model reaches ~86%
 accuracy after 100K steps in 8 hours of training time.
 
