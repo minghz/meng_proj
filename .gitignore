@@ -12,3 +12,5 @@ tensorflow/pip-selfcheck.json
 tensorflow/src/learning/summaries/
 
 source/
+
+*.swp
