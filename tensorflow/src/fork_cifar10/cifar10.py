@@ -17,7 +17,7 @@ import cifar10_input
 tf.NoGradient("ReshapeFix")
 
 # use custom op to calculate gradients
-reshape_fix = tf.load_op_library('custom_ops/reshape_fix.so').reshape_fix
+reshape_fix = tf.load_op_library('./custom_ops/reshape_fix.so').reshape_fix
 
 parser = argparse.ArgumentParser()
 
@@ -31,7 +31,7 @@ parser.add_argument('--data_dir', type=str, default='/tmp/cifar10_fix_data',
 parser.add_argument('--use_fp16', type=bool, default=False,
                     help='Train the model using fp16.')
 
-parser.add_argument('--log_dir', type=str, default='/tmp/cifar10_fix',
+parser.add_argument('--log_dir', type=str, default='/tmp/cifar10_fix_train',
                     help='Directory where to write event logs and checkpoint.')
 
 parser.add_argument('--max_steps', type=int, default=1000,
@@ -42,6 +42,25 @@ parser.add_argument('--log_device_placement', type=bool, default=False,
 
 parser.add_argument('--log_frequency', type=int, default=10,
                     help='How often to log results to the console.')
+
+# for evaluation
+parser.add_argument('--eval_dir', type=str, default='/tmp/cifar10_fix_eval',
+                    help='Directory where to write event logs.')
+
+parser.add_argument('--eval_data', type=str, default='test',
+                    help='Either `test` or `train_eval`.')
+
+parser.add_argument('--checkpoint_dir', type=str, default='/tmp/cifar10_fix_train',
+                    help='Directory where to read model checkpoints.')
+
+parser.add_argument('--eval_interval_secs', type=int, default=60*5,
+                    help='How often to run the eval.')
+
+parser.add_argument('--num_examples', type=int, default=10000,
+                    help='Number of examples to run.')
+
+parser.add_argument('--run_once', type=bool, default=False,
+                    help='Whether to run eval only once.')
 
 FLAGS = parser.parse_args()
 
