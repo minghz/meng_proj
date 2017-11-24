@@ -8,7 +8,7 @@ import cifar10 # library of functions
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 # use custom op to calculate gradients
-reshape_fix = tf.load_op_library('custom_ops/reshape_fix.so').reshape_fix
+reshape_fix = tf.load_op_library('./custom_ops/reshape_fix.so').reshape_fix
 
 parser = cifar10.parser
 
@@ -45,14 +45,19 @@ def train():
 
   # init all variables
   tf.global_variables_initializer().run()
+  # create a saver for checkpoints
+  saver = tf.train.Saver(tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES))
   # needed on interactive session so it doesn't hang
   tf.train.start_queue_runners()
 
   for i in range(FLAGS.max_steps):
     summary, _ = sess.run([merged_summary, train_op])
     train_writer.add_summary(summary, i) # summary
-
+    
     if(i % 10 == 0):
+      saver.save(sess, FLAGS.log_dir + '/checkpoint', global_step=i)
+
+    if(i % 5 == 0):
       sess.run([update_fix_pt_ops])
       print('Step: %s, Loss: %s' % (i, loss.eval()))
 

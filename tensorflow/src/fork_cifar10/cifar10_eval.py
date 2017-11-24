@@ -83,6 +83,13 @@ def eval_once(saver, summary_writer, top_k_op, logits, labels, summary_op):
         predictions = sess.run([top_k_op])
         true_count += np.sum(predictions)
         step += 1
+    
+      # Calculate accuracy
+      predict_classes = tf.cast(tf.argmax(logits, 1), tf.int32)
+      correct_classes = labels
+      correct_prediction = tf.equal(predict_classes, correct_classes)
+      accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+      print('accuracy: %.3f' % (accuracy.eval()))
 
       # Compute precision @ 1.
       precision = true_count / total_sample_count
@@ -91,6 +98,7 @@ def eval_once(saver, summary_writer, top_k_op, logits, labels, summary_op):
       summary = tf.Summary()
       summary.ParseFromString(sess.run(summary_op))
       summary.value.add(tag='Precision @ 1', simple_value=precision)
+      summary.value.add(tag='Accuracy', simple_value=accuracy.eval())
       summary_writer.add_summary(summary, global_step)
     except Exception as e:  # pylint: disable=broad-except
       coord.request_stop(e)
@@ -105,6 +113,9 @@ def evaluate():
     # Get images and labels for CIFAR-10.
     eval_data = FLAGS.eval_data == 'test'
     images, labels = cifar10.inputs(eval_data=eval_data)
+
+    # Define all the fixed point variables we will be using later
+    cifar10.initialize_fix_point_variables()
 
     # Build a Graph that computes the logits predictions from the
     # inference model.
@@ -125,7 +136,7 @@ def evaluate():
     summary_writer = tf.summary.FileWriter(FLAGS.eval_dir, g)
 
     while True:
-      eval_once(saver, summary_writer, top_k_op, summary_op)
+      eval_once(saver, summary_writer, top_k_op, logits, labels, summary_op)
       if FLAGS.run_once:
         break
       time.sleep(FLAGS.eval_interval_secs)
