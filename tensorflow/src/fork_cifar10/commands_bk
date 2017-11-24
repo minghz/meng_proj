@@ -1,0 +1,17 @@
+# Here are some commands to run =====================
+#
+# first, we need to run our training
+# write training summary to log_dir
+# batch size of 10 images
+# will run max 5000 steps (10*5000 images)
+python cifar10_train.py --log_dir=logs --batch_size=10 --max_steps=5000
+
+# Then, we need to run our evaluation
+# checkpoints obtained from the logs dir
+# test summary written to eval_dir
+# running inference evaluation every 10 seconds
+python cifar10_eval.py --eval_interval_secs=10 --checkpoint_dir=logs --eval_dir=eval_logs
+
+# lastly, we need to visualize the evaluation data with tensorboard
+# Basically, how accurate are we?
+tensorboard --logdir=eval_logs
