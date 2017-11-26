@@ -11,6 +11,10 @@ import mnist_lenet
 
 from tensorflow.examples.tutorials.mnist import input_data
 
+tf.NoGradient("ReshapeFix")
+# use custom op to calculate gradients
+reshape_fix = tf.load_op_library('./custom_ops/reshape_fix.so').reshape_fix
+
 # supress tensorflow warning
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -41,11 +45,11 @@ def train():
   # 5x5 patch, 1 input chanel, 32 ouput chanel (features)
   # first conv layer, output is same as input 28x28
   # first max pool layer, endinv up with 14x14 size
-  conv1_out = mnist_lenet.conv_layer([5, 5], 1, 32, flat_inputs, 'h_conv1')
+  conv1_out = mnist_lenet.conv_layer([5, 5], 1, 32, flat_inputs, 'conv1')
 
   # second conv layer, 64 features, 5x5 patch
   # 32 input channel because 32 input feature from 1st layer
-  conv2_out = mnist_lenet.conv_layer([5, 5], 32, 64, conv1_out, 'h_conv2')
+  conv2_out = mnist_lenet.conv_layer([5, 5], 32, 64, conv1_out, 'conv2')
 
   # -1?, flatten the output from 2nd layer
   flat_conv2_out = tf.reshape(conv2_out, [-1, 7 * 7 * 64])
@@ -61,7 +65,7 @@ def train():
     tf.summary.scalar('dropout_keep_probability', keep_prob)
     local3_drop = tf.nn.dropout(local3, keep_prob)
 
-  local4 = mnist_lenet.nn_layer(local3_drop, 1024, 10, 'y_fc2')
+  local4 = mnist_lenet.nn_layer(local3_drop, 1024, 10, 'local4')
 
 
   # cross_entropy == loss
