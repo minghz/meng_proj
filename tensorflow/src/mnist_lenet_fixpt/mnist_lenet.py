@@ -26,6 +26,12 @@ def initialize_variables():
       # Assigning more or less digit/fraction bits to fixed point number
       acc = tf.get_variable('acc', initializer=[0., 0.], trainable=False)
 
+def image_input_summary(x):
+  """Show the images in tensorboard"""
+  with tf.name_scope('input_reshape'):
+    image_shaped_input = tf.reshape(x, [-1, 28, 28, 1])
+    tf.summary.image('input', image_shaped_input, 10)
+
 # Initialize weights with a small value to prevent 0 gradients
 def weight_variable(shape):
   """Create a weight variable with appropriate initialization."""
@@ -108,3 +114,24 @@ def conv_layer(patch_dim,
     h_pool = max_pool_2x2(h_conv)
     tf.summary.histogram('pools', h_pool)
     return h_pool
+
+def dropout(local3):
+  """Apply Dropout to avoid overfitting
+  note: its happening between the last fully connected layer
+  and the output layer"""
+
+  with tf.name_scope('dropout'):
+    keep_prob = tf.placeholder(tf.float32)
+    tf.summary.scalar('dropout_keep_probability', keep_prob)
+    return tf.nn.dropout(local3, keep_prob), keep_prob, keep_prob
+
+def cross_entropy(y_, local4):
+  """Cross entropy is also the technique we are using to figure out
+  the loss of the model"""
+
+  with tf.name_scope('cross_entropy'):
+    diff = tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=local4)
+    with tf.name_scope('total'):
+      return tf.reduce_mean(diff)
+
+
