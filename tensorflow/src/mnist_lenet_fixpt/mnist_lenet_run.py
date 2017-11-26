@@ -31,7 +31,7 @@ def train():
   with tf.name_scope('input'):
     x = tf.placeholder(tf.float32, [None, 784], name='x-input')
     y_ = tf.placeholder(tf.float32, [None, 10], name='y-input')
-  mnist_lenet.image_input_summary(x)
+  mnist_lenet.sumlib.image_input_summary(x)
 
   # reshape input to 4d tensor
   # -1?, 28x28 widthxheight, 1 color channel
