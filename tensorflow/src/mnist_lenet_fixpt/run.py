@@ -7,7 +7,7 @@ import os
 import sys
 
 import tensorflow as tf
-import mnist_lenet
+import libs
 
 from tensorflow.examples.tutorials.mnist import input_data
 
@@ -31,7 +31,7 @@ def train():
   with tf.name_scope('input'):
     x = tf.placeholder(tf.float32, [None, 784], name='x-input')
     y_ = tf.placeholder(tf.float32, [None, 10], name='y-input')
-  mnist_lenet.sumlib.image_input_summary(x)
+  libs.sumlib.image_input_summary(x)
 
   # reshape input to 4d tensor
   # -1?, 28x28 widthxheight, 1 color channel
@@ -41,11 +41,11 @@ def train():
   # 5x5 patch, 1 input chanel, 32 ouput chanel (features)
   # first conv layer, output is same as input 28x28
   # first max pool layer, endinv up with 14x14 size
-  conv1 = mnist_lenet.conv_layer([5, 5], 1, 32, flat_inputs, 'conv1')
+  conv1 = libs.conv_layer([5, 5], 1, 32, flat_inputs, 'conv1')
 
   # second conv layer, 64 features, 5x5 patch
   # 32 input channel because 32 input feature from 1st layer
-  conv2 = mnist_lenet.conv_layer([5, 5], 32, 64, conv1, 'conv2')
+  conv2 = libs.conv_layer([5, 5], 32, 64, conv1, 'conv2')
 
   # -1?, flatten the output from 2nd layer
   flat_conv2 = tf.reshape(conv2, [-1, 7 * 7 * 64])
@@ -53,16 +53,16 @@ def train():
   # add fully-connected layer of 1024 neurons to process everything
   # one dimention the output from 2nd layer, 1024 neurons
   # ( x*W + b ) line normal fully connected
-  local3 = mnist_lenet.nn_layer(flat_conv2, 7 * 7 * 64, 1024, 'local3')
+  local3 = libs.nn_layer(flat_conv2, 7 * 7 * 64, 1024, 'local3')
 
   # Apply dropout technique to avoid overfitting
-  local3_drop, keep_prob = mnist_lenet.dropout(local3)
+  local3_drop, keep_prob = libs.dropout(local3)
 
   # output layer, one-hot
-  local4 = mnist_lenet.nn_layer(local3_drop, 1024, 10, 'local4')
+  local4 = libs.nn_layer(local3_drop, 1024, 10, 'local4')
 
   # cross_entropy == loss
-  loss = mnist_lenet.cross_entropy(y_, local4)
+  loss = libs.cross_entropy(y_, local4)
   tf.summary.scalar('loss', loss)
 
   with tf.name_scope('train'):
