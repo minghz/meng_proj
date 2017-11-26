@@ -89,7 +89,8 @@ def eval_once(saver, summary_writer, top_k_op, logits, labels, summary_op):
       correct_classes = labels
       correct_prediction = tf.equal(predict_classes, correct_classes)
       accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-      print('accuracy: %.3f' % (accuracy.eval()))
+      acc_value = accuracy.eval()
+      print('accuracy: %.3f' % (acc_value))
 
       # Compute precision @ 1.
       precision = true_count / total_sample_count
@@ -98,7 +99,7 @@ def eval_once(saver, summary_writer, top_k_op, logits, labels, summary_op):
       summary = tf.Summary()
       summary.ParseFromString(sess.run(summary_op))
       summary.value.add(tag='Precision @ 1', simple_value=precision)
-      summary.value.add(tag='Accuracy', simple_value=accuracy.eval())
+      summary.value.add(tag='Accuracy', simple_value=acc_value)
       summary_writer.add_summary(summary, global_step)
     except Exception as e:  # pylint: disable=broad-except
       coord.request_stop(e)

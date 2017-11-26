@@ -64,7 +64,7 @@ class ReshapeFixOp : public OpKernel {
           float fix_equivalent = resolution * trunc(input(i) / resolution);
           float deviation_from_orig = abs(fix_equivalent - input(i)) / input(i);
           output(i) = fix_equivalent;
-          if(deviation_from_orig > 0.05){ // more than 5% deviation
+          if(deviation_from_orig > 0.02){ // more than 2% deviation
             unprecise_count++;
           }
         }
