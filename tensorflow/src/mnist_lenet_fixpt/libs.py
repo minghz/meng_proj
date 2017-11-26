@@ -1,10 +1,14 @@
 import tensorflow as tf
 
+tf.NoGradient("ReshapeFix")
+# use custom op to calculate gradients
+reshape_fix = tf.load_op_library('./custom_ops/reshape_fix.so').reshape_fix
+
 import varlib
 import sumlib
 
 
-def _to_fixed_point(x, scope):
+def to_fixed_point(x, scope):
   """Helper method to convert tensors to fixed point accuracy
 
   Args:
@@ -22,6 +26,34 @@ def _to_fixed_point(x, scope):
 
   return fixed_x
 
+def update_fix_point_accuracy():
+  """Update the fixed point variable accuracy if required
+
+  Returns:
+    update_ops: list of operations that updates the fix_def of all layers
+  """
+  update_ops = []
+  scope_names = ['conv1']#, 'conv2', 'local3', 'local4']
+  for scope_name in scope_names:
+    with tf.variable_scope(scope_name, reuse=True):
+      fix_def = tf.get_variable('fix_def', [2], dtype=tf.int32)
+      acc = tf.get_variable('acc', [2])
+
+      fix_def = tf.cond(
+        acc[0] > 0.05, # overflow clipped
+        lambda: tf.assign_add(fix_def, [1, 0]),
+        lambda: tf.assign_add(fix_def, [0, 0])
+      )
+
+      fix_def = tf.cond(
+        acc[1] > 0.05, # under tolerance
+          lambda: tf.assign_add(fix_def, [0, 1]),
+          lambda: tf.assign_add(fix_def, [0, 0])
+      )
+      update_ops.append(fix_def)
+
+  return update_ops
+
 
 def initialize_variables():
   """Initializing variables:
@@ -31,7 +63,7 @@ def initialize_variables():
   4. Fixed Point number definitions for layers in 3)
   """
   # The output of the major layers that we want to convert to fixed point precision
-  scope_names = ['input', 'conv1', 'conv2', 'local3', 'local4']
+  scope_names = ['conv1', 'conv2', 'local3', 'local4']
   for scope_name in scope_names:
     with tf.variable_scope(scope_name):
       # Fixed point nunmber precision settings

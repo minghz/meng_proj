@@ -7,10 +7,6 @@ import libs
 
 from tensorflow.examples.tutorials.mnist import input_data
 
-tf.NoGradient("ReshapeFix")
-# use custom op to calculate gradients
-reshape_fix = tf.load_op_library('./custom_ops/reshape_fix.so').reshape_fix
-
 # supress tensorflow warning
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -33,11 +29,16 @@ def train():
   # -1?, 28x28 widthxheight, 1 color channel
   flat_inputs = tf.reshape(x, [-1, 28, 28, 1])
 
+  # Define all variable fixed point parameters
+  #libs.initialize_variables()
+
   # First conv. layer has 32 features of 5x5 patch
   # 5x5 patch, 1 input chanel, 32 ouput chanel (features)
   # first conv layer, output is same as input 28x28
   # first max pool layer, endinv up with 14x14 size
-  conv1 = libs.conv_layer([5, 5], 1, 32, flat_inputs, 'conv1')
+  with tf.variable_scope('conv1') as scope:
+    conv1 = libs.conv_layer([5, 5], 1, 32, flat_inputs, 'conv1')
+    fixed_conv1 = libs.to_fixed_point(conv1, scope)
 
   # second conv layer, 64 features, 5x5 patch
   # 32 input channel because 32 input feature from 1st layer
@@ -111,6 +112,7 @@ def train():
         print('Adding run metadata for', i)
       else:  # Record a summary
         summary, _ = sess.run([merged, train_step], feed_dict=feed_dict(True))
+        sess.run([libs.update_fix_point_accuracy()])
         train_writer.add_summary(summary, i)
   train_writer.close()
   test_writer.close()
