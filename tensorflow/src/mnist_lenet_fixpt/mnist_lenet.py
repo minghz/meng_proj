@@ -8,6 +8,71 @@ import sys
 
 import tensorflow as tf
 
+import varlib
+
+def _fixed_point_conversion_summary(x, fixed_x, fix_def, acc):
+  """Helper to create summaries for fixed point conversion steps.
+
+  Creates a summary that provies a histogram of resulting tensor
+  Creates a summary that provides the percentage innacuracy of the conversion
+
+  Args:
+    x: original tensor
+    fixed_x: Resulting tensor
+    fix_def: fix point definition for this conversion
+    acc: accuracy array
+  Returns:
+    nothing
+  """
+  with tf.variable_scope('fix_def'):
+    tf.summary.scalar('digit bits', fix_def[0])
+    tf.summary.scalar('fraction bits', fix_def[1])
+
+  with tf.variable_scope('acc'):
+    tf.summary.scalar('percentage clip', (acc[0]))
+    tf.summary.scalar('percentage under tolerance', (acc[1]))
+
+  tf.summary.histogram('original', x)
+  tf.summary.histogram('fixed', fixed_x)
+
+
+def _to_fixed_point(x, scope):
+  """Helper method to convert tensors to fixed point accuracy
+
+  Args:
+    x: input tensor
+    scope: variable scope that is being converted
+  Returns:
+    fixed point accuracy equivalent tensor
+  """
+  scope.reuse_variables()
+  fix_def = tf.get_variable('fix_def', initializer=[1, 1], dtype=tf.int32, trainable=False)
+  acc = tf.get_variable('acc', [2], trainable=False)
+
+  fixed_x = reshape_fix(x, fix_def, acc)
+  _fixed_point_conversion_summary(x, fixed_x, fix_def, acc)
+
+  return fixed_x
+
+
+def _activation_summary(x):
+  """Helper to create summaries for activations.
+
+  Creates a summary that provides a histogram of activations.
+  Creates a summary that measures the sparsity of activations.
+
+  Args:
+    x: Tensor
+  Returns:
+    nothing
+  """
+  # Remove 'tower_[0-9]/' from the name in case this is a multi-GPU training
+  # session. This helps the clarity of presentation on tensorboard.
+  tensor_name = re.sub('%s_[0-9]*/' % TOWER_NAME, '', x.op.name)
+  tf.summary.histogram(tensor_name + '/activations', x)
+  tf.summary.scalar(tensor_name + '/sparsity', tf.nn.zero_fraction(x))
+
+
 def initialize_variables():
   """Initializing variables:
   1. Conversion Tensors that sit in-between layers
@@ -32,16 +97,6 @@ def image_input_summary(x):
     image_shaped_input = tf.reshape(x, [-1, 28, 28, 1])
     tf.summary.image('input', image_shaped_input, 10)
 
-# Initialize weights with a small value to prevent 0 gradients
-def weight_variable(shape):
-  """Create a weight variable with appropriate initialization."""
-  initial = tf.truncated_normal(shape, stddev=0.1)
-  return tf.Variable(initial)
-
-def bias_variable(shape):
-  """Create a bias variable with appropriate initialization."""
-  initial = tf.constant(0.1, shape=shape)
-  return tf.Variable(initial)
 
 def variable_summaries(var):
   # Attach a lot of summaries to a Tensor (for TensorBoard visualization).
@@ -66,10 +121,10 @@ def nn_layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu):
   with tf.name_scope(layer_name):
     # This Variable will hold the state of the weights for the layer
     with tf.name_scope('weights'):
-      weights = weight_variable([input_dim, output_dim])
+      weights = varlib.weight_variable([input_dim, output_dim])
       variable_summaries(weights)
     with tf.name_scope('biases'):
-      biases = bias_variable([output_dim])
+      biases = varlib.bias_variable([output_dim])
       variable_summaries(biases)
     with tf.name_scope('Wx_plus_b'):
       preactivate = tf.matmul(input_tensor, weights) + biases
@@ -100,13 +155,13 @@ def conv_layer(patch_dim,
   """
   with tf.name_scope(layer_name):
     with tf.name_scope('weights'):
-      W_conv = weight_variable([patch_dim[0],
+      W_conv = varlib.weight_variable([patch_dim[0],
                                patch_dim[1],
                                num_input_ch,
                                num_features])
       variable_summaries(W_conv)
     with tf.name_scope('biases'):
-      b_conv = bias_variable([num_features])
+      b_conv = varlib.bias_variable([num_features])
       variable_summaries(b_conv)
     with tf.name_scope('conv'):
       h_conv = act(conv2d(flat_inputs, W_conv) + b_conv)
@@ -123,7 +178,7 @@ def dropout(local3):
   with tf.name_scope('dropout'):
     keep_prob = tf.placeholder(tf.float32)
     tf.summary.scalar('dropout_keep_probability', keep_prob)
-    return tf.nn.dropout(local3, keep_prob), keep_prob, keep_prob
+    return tf.nn.dropout(local3, keep_prob), keep_prob
 
 def cross_entropy(y_, local4):
   """Cross entropy is also the technique we are using to figure out
@@ -133,5 +188,3 @@ def cross_entropy(y_, local4):
     diff = tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=local4)
     with tf.name_scope('total'):
       return tf.reduce_mean(diff)
-
-
