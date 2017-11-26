@@ -43,12 +43,10 @@ def train():
   # first max pool layer, endinv up with 14x14 size
   conv1_out = mnist_lenet.conv_layer([5, 5], 1, 32, flat_inputs, 'h_conv1')
 
-  print(conv1_out)
   # second conv layer, 64 features, 5x5 patch
   # 32 input channel because 32 input feature from 1st layer
   conv2_out = mnist_lenet.conv_layer([5, 5], 32, 64, conv1_out, 'h_conv2')
 
-  print(conv2_out)
   # -1?, flatten the output from 2nd layer
   flat_conv2_out = tf.reshape(conv2_out, [-1, 7 * 7 * 64])
 
@@ -57,7 +55,6 @@ def train():
   # ( x*W + b ) line normal fully connected
   local3 = mnist_lenet.nn_layer(flat_conv2_out, 7 * 7 * 64, 1024, 'local3')
 
-  print(local3)
   # Apply Dropout to avoid overfitting
   with tf.name_scope('dropout'):
     keep_prob = tf.placeholder(tf.float32)
@@ -66,7 +63,6 @@ def train():
 
   local4 = mnist_lenet.nn_layer(local3_drop, 1024, 10, 'y_fc2')
 
-  print(local4)
 
   # cross_entropy == loss
   with tf.name_scope('cross_entropy'):
