@@ -17,7 +17,7 @@ def to_fixed_point(x, scope):
   Returns:
     fixed point accuracy equivalent tensor
   """
-  scope.reuse_variables()
+  #scope.reuse_variables()
   fix_def = tf.get_variable('fix_def', initializer=[1, 1], dtype=tf.int32, trainable=False)
   acc = tf.get_variable('acc', [2], trainable=False)
 
@@ -33,7 +33,7 @@ def update_fix_point_accuracy():
     update_ops: list of operations that updates the fix_def of all layers
   """
   update_ops = []
-  scope_names = ['conv1']#, 'conv2', 'local3', 'local4']
+  scope_names = ['conv1', 'conv2', 'local3', 'local4']
   for scope_name in scope_names:
     with tf.variable_scope(scope_name, reuse=True):
       fix_def = tf.get_variable('fix_def', [2], dtype=tf.int32)
