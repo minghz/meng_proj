@@ -17,7 +17,6 @@ def to_fixed_point(x, scope):
   Returns:
     fixed point accuracy equivalent tensor
   """
-  #scope.reuse_variables()
   fix_def = tf.get_variable('fix_def', initializer=[1, 1], dtype=tf.int32, trainable=False)
   acc = tf.get_variable('acc', [2], trainable=False)
 
