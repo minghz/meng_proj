@@ -40,11 +40,11 @@ def train():
   # second conv layer, 64 features, 5x5 patch
   # 32 input channel because 32 input feature from 1st layer
   with tf.variable_scope('conv2') as scope:
-    conv2 = libs.conv_layer([5, 5], 32, 64, conv1, 'conv2')
+    conv2 = libs.conv_layer([5, 5], 32, 64, fixed_conv1, 'conv2')
     fixed_conv2 = libs.to_fixed_point(conv2, scope)
 
   # -1?, flatten the output from 2nd layer
-  flat_conv2 = tf.reshape(conv2, [-1, 7 * 7 * 64])
+  flat_conv2 = tf.reshape(fixed_conv2, [-1, 7 * 7 * 64])
 
   # add fully-connected layer of 1024 neurons to process everything
   # one dimention the output from 2nd layer, 1024 neurons
@@ -54,7 +54,7 @@ def train():
     fixed_local3 = libs.to_fixed_point(local3, scope)
 
   # Apply dropout technique to avoid overfitting
-  local3_drop, keep_prob = libs.dropout(local3)
+  local3_drop, keep_prob = libs.dropout(fixed_local3)
 
   # output layer, one-hot
   with tf.variable_scope('local4') as scope:

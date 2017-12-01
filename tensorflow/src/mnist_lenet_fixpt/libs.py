@@ -17,8 +17,8 @@ def to_fixed_point(x, scope):
   Returns:
     fixed point accuracy equivalent tensor
   """
-  fix_def = tf.get_variable('fix_def', initializer=[1, 1], dtype=tf.int32, trainable=False)
-  acc = tf.get_variable('acc', [2], trainable=False)
+  fix_def = tf.get_variable('fix_def', initializer=[5, 10], dtype=tf.int32, trainable=False)
+  acc = tf.get_variable('acc', initializer=[0., 0.], trainable=False)
 
   fixed_x = reshape_fix(x, fix_def, acc)
   sumlib.fixed_point_conversion_summary(x, fixed_x, fix_def, acc)
