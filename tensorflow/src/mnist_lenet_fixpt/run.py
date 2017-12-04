@@ -115,7 +115,7 @@ def train():
         print('Adding run metadata for', i)
       else:  # Record a summary
         summary, _ = sess.run([merged, train_step], feed_dict=feed_dict(True))
-        sess.run([libs.update_fix_point_accuracy()])
+        sess.run([libs.update_fix_point_accuracy()]) # update fix point accuract every step
         train_writer.add_summary(summary, i)
   train_writer.close()
   test_writer.close()

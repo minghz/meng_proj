@@ -1,12 +1,16 @@
 import tensorflow as tf
+from tensorflow.python.framework import ops
 
-tf.NoGradient("ReshapeFix")
-# use custom op to calculate gradients
-reshape_fix = tf.load_op_library('./custom_ops/reshape_fix.so').reshape_fix
+# Defining custom operations
+rf = tf.load_op_library('./custom_ops/reshape_fix.so')
+reshape_fix = rf.reshape_fix
+# Gradient registration for out custom operation
+@ops.RegisterGradient("ReshapeFix")
+def _reshape_fix_grad(op, grad):
+  return rf.reshape_fix_grad(grad, op.inputs[0], op.inputs[1], op.inputs[2])
 
 import varlib
 import sumlib
-
 
 def to_fixed_point(x, scope):
   """Helper method to convert tensors to fixed point accuracy
@@ -17,8 +21,9 @@ def to_fixed_point(x, scope):
   Returns:
     fixed point accuracy equivalent tensor
   """
-  fix_def = tf.get_variable('fix_def', initializer=[5, 10], dtype=tf.int32, trainable=False)
-  acc = tf.get_variable('acc', initializer=[0., 0.], trainable=False)
+  with tf.variable_scope(scope):
+    fix_def = tf.get_variable('fix_def', initializer=[1, 1], dtype=tf.int32, trainable=False)
+    acc = tf.get_variable('acc', initializer=[0., 0.], trainable=False)
 
   fixed_x = reshape_fix(x, fix_def, acc)
   sumlib.fixed_point_conversion_summary(x, fixed_x, fix_def, acc)
