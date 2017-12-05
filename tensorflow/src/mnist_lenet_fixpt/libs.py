@@ -86,20 +86,22 @@ def nn_layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu):
   and adds a number of summary ops.
   """
   # Adding a name scope ensures logical grouping of the layers in the graph.
-  with tf.name_scope(layer_name):
-    # This Variable will hold the state of the weights for the layer
-    with tf.name_scope('weights'):
-      weights = varlib.weight_variable([input_dim, output_dim])
-      sumlib.variable_summaries(weights)
-    with tf.name_scope('biases'):
-      biases = varlib.bias_variable([output_dim])
-      sumlib.variable_summaries(biases)
-    with tf.name_scope('Wx_plus_b'):
-      preactivate = tf.matmul(input_tensor, weights) + biases
-      tf.summary.histogram('pre_activations', preactivate)
+  # This Variable will hold the state of the weights for the layer
+  # weights
+  with tf.name_scope('weights'):
+    weights = varlib.weight_variable([input_dim, output_dim])
+    sumlib.variable_summaries(weights)
+  # biases
+  with tf.name_scope('biases'):
+    biases = varlib.bias_variable([output_dim])
+    sumlib.variable_summaries(biases)
+  # Wx_+_b
+  with tf.name_scope('Wx_plus_b'):
+    preactivate = tf.matmul(input_tensor, weights) + biases
+    tf.summary.histogram('pre_activations', preactivate)
     activations = act(preactivate, name='activation')
     tf.summary.histogram('activations', activations)
-    return activations
+  return activations
 
 # convolution layer - output same size as input: stride = 1; 0-padded
 def conv2d(x, W):
@@ -121,22 +123,26 @@ def conv_layer(patch_dim,
   """ Reusable code for making a convolution layer
   It has a conv layer and a pooling layer
   """
-  with tf.name_scope(layer_name):
-    with tf.name_scope('weights'):
-      W_conv = varlib.weight_variable([patch_dim[0],
-                               patch_dim[1],
-                               num_input_ch,
-                               num_features])
-      sumlib.variable_summaries(W_conv)
-    with tf.name_scope('biases'):
-      b_conv = varlib.bias_variable([num_features])
-      sumlib.variable_summaries(b_conv)
-    with tf.name_scope('conv'):
-      h_conv = act(conv2d(flat_inputs, W_conv) + b_conv)
-      tf.summary.histogram('convolutions', h_conv)
+  # wieghts
+  with tf.name_scope('weights'):
+    W_conv = varlib.weight_variable([patch_dim[0],
+                             patch_dim[1],
+                             num_input_ch,
+                             num_features])
+    sumlib.variable_summaries(W_conv)
+  # biases
+  with tf.name_scope('biases'):
+    b_conv = varlib.bias_variable([num_features])
+    sumlib.variable_summaries(b_conv)
+  # activation convolution
+  with tf.name_scope('activation'):
+    h_conv = act(conv2d(flat_inputs, W_conv) + b_conv)
+    tf.summary.histogram('convolutions', h_conv)
+  # max pool
+  with tf.name_scope('max_pool'):
     h_pool = max_pool_2x2(h_conv)
     tf.summary.histogram('pools', h_pool)
-    return h_pool
+  return h_pool
 
 def dropout(local3):
   """Apply Dropout to avoid overfitting
