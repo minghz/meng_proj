@@ -135,8 +135,8 @@ class ReshapeFixGradOp : public OpKernel {
         output(i) = input(i);
 
       }
-      accuracy(0) = 0.;
-      accuracy(1) = 0.;
+      //accuracy(0) = 0.;
+      //accuracy(1) = 0.;
 
       //std::cout << "%over: " << accuracy(0)
       //  << " %under: " << accuracy(1) << std::endl;
