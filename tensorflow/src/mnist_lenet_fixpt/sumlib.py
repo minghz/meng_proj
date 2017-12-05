@@ -1,4 +1,3 @@
-
 import tensorflow as tf
 
 def image_input_summary(x):

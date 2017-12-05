@@ -1,7 +1,3 @@
-#from __future__ import absolute_import
-#from __future__ import division
-#from __future__ import print_function
-
 import argparse
 import os
 import sys
@@ -10,10 +6,6 @@ import tensorflow as tf
 import libs
 
 from tensorflow.examples.tutorials.mnist import input_data
-
-tf.NoGradient("ReshapeFix")
-# use custom op to calculate gradients
-reshape_fix = tf.load_op_library('./custom_ops/reshape_fix.so').reshape_fix
 
 # supress tensorflow warning
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -41,25 +33,33 @@ def train():
   # 5x5 patch, 1 input chanel, 32 ouput chanel (features)
   # first conv layer, output is same as input 28x28
   # first max pool layer, endinv up with 14x14 size
-  conv1 = libs.conv_layer([5, 5], 1, 32, flat_inputs, 'conv1')
+  with tf.variable_scope('conv1') as scope:
+    conv1 = libs.conv_layer([5, 5], 1, 32, flat_inputs, 'conv1')
+    fixed_conv1 = libs.to_fixed_point(conv1, scope)
 
   # second conv layer, 64 features, 5x5 patch
   # 32 input channel because 32 input feature from 1st layer
-  conv2 = libs.conv_layer([5, 5], 32, 64, conv1, 'conv2')
+  with tf.variable_scope('conv2') as scope:
+    conv2 = libs.conv_layer([5, 5], 32, 64, fixed_conv1, 'conv2')
+    fixed_conv2 = libs.to_fixed_point(conv2, scope)
 
   # -1?, flatten the output from 2nd layer
-  flat_conv2 = tf.reshape(conv2, [-1, 7 * 7 * 64])
+  flat_conv2 = tf.reshape(fixed_conv2, [-1, 7 * 7 * 64])
 
   # add fully-connected layer of 1024 neurons to process everything
   # one dimention the output from 2nd layer, 1024 neurons
   # ( x*W + b ) line normal fully connected
-  local3 = libs.nn_layer(flat_conv2, 7 * 7 * 64, 1024, 'local3')
+  with tf.variable_scope('local3') as scope:
+    local3 = libs.nn_layer(flat_conv2, 7 * 7 * 64, 1024, 'local3')
+    fixed_local3 = libs.to_fixed_point(local3, scope)
 
   # Apply dropout technique to avoid overfitting
-  local3_drop, keep_prob = libs.dropout(local3)
+  local3_drop, keep_prob = libs.dropout(fixed_local3)
 
   # output layer, one-hot
-  local4 = libs.nn_layer(local3_drop, 1024, 10, 'local4')
+  with tf.variable_scope('local4') as scope:
+    local4 = libs.nn_layer(local3_drop, 1024, 10, 'local4')
+    fixed_local4 = libs.to_fixed_point(local4, scope)
 
   # cross_entropy == loss
   loss = libs.cross_entropy(y_, local4)
@@ -115,6 +115,7 @@ def train():
         print('Adding run metadata for', i)
       else:  # Record a summary
         summary, _ = sess.run([merged, train_step], feed_dict=feed_dict(True))
+        sess.run([libs.update_fix_point_accuracy()]) # update fix point accuract every step
         train_writer.add_summary(summary, i)
   train_writer.close()
   test_writer.close()
