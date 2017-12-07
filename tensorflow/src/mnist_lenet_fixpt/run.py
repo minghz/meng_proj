@@ -83,7 +83,8 @@ def train():
   test_writer = tf.summary.FileWriter(FLAGS.log_dir + '/test')
 
   tf.global_variables_initializer().run()
-  sess.graph.finalize() #graph is read-only after this step
+  # Graph is read-only after this step. Helps catch memory leaks made by extra operations
+  sess.graph.finalize()
   # Train the model, and also write summaries.
   # Every 10th step, measure test-set accuracy, and write test summaries
   # All other steps, run train_step on training data, & add training summaries
