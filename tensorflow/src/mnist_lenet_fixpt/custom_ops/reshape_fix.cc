@@ -9,7 +9,7 @@ REGISTER_OP("ReshapeFix")
 .Input("to_fix: float") //input tensor
 .Input("fixpt_definition: int32") // range and precision bits (m, n)
 .Input("accuracy: float") // overflow or unprecise percentage
-.Output("fixed: float")    
+.Output("fixed: float")
 .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
     c->set_output(0, c->input(0));
     return Status::OK();
@@ -62,7 +62,7 @@ class ReshapeFixOp : public OpKernel {
         // convert resolution to fixed point equivalent
         } else {
           float fix_equivalent = resolution * trunc(input(i) / resolution);
-          float deviation_from_orig = abs(fix_equivalent - input(i)) / input(i);
+          float deviation_from_orig = abs(fix_equivalent - input(i)) / abs(input(i));
           output(i) = fix_equivalent;
           if(deviation_from_orig > 0.05){ // more than 5% deviation
             unprecise_count++;
