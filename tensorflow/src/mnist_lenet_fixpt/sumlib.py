@@ -33,11 +33,11 @@ def fixed_point_conversion_summary(x, fixed_x, fix_def, acc):
   Returns:
     nothing
   """
-  with tf.variable_scope('fix_def'):
+  with tf.name_scope('fix_def'):
     tf.summary.scalar('digit bits', fix_def[0])
     tf.summary.scalar('fraction bits', fix_def[1])
 
-  with tf.variable_scope('acc'):
+  with tf.name_scope('acc'):
     tf.summary.scalar('percentage clip', (acc[0]))
     tf.summary.scalar('percentage under tolerance', (acc[1]))
 
