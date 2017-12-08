@@ -1,3 +1,4 @@
+import re
 import tensorflow as tf
 
 def image_input_summary(x):
@@ -8,15 +9,14 @@ def image_input_summary(x):
 
 def variable_summaries(var):
   # Attach a lot of summaries to a Tensor (for TensorBoard visualization).
-  with tf.name_scope('summaries'):
-    mean = tf.reduce_mean(var)
-    tf.summary.scalar('mean', mean)
-    with tf.name_scope('stddev'):
-      stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
-    tf.summary.scalar('stddev', stddev)
-    tf.summary.scalar('max', tf.reduce_max(var))
-    tf.summary.scalar('min', tf.reduce_min(var))
-    tf.summary.histogram('histogram', var)
+  mean = tf.reduce_mean(var)
+  tf.summary.scalar('mean', mean)
+  with tf.name_scope('stddev'):
+    stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+  tf.summary.scalar('stddev', stddev)
+  tf.summary.scalar('max', tf.reduce_max(var))
+  tf.summary.scalar('min', tf.reduce_min(var))
+  tf.summary.histogram('histogram', var)
 
 
 def fixed_point_conversion_summary(x, fixed_x, fix_def, acc):
@@ -33,11 +33,11 @@ def fixed_point_conversion_summary(x, fixed_x, fix_def, acc):
   Returns:
     nothing
   """
-  with tf.variable_scope('fix_def'):
+  with tf.name_scope('fix_def'):
     tf.summary.scalar('digit bits', fix_def[0])
     tf.summary.scalar('fraction bits', fix_def[1])
 
-  with tf.variable_scope('acc'):
+  with tf.name_scope('acc'):
     tf.summary.scalar('percentage clip', (acc[0]))
     tf.summary.scalar('percentage under tolerance', (acc[1]))
 

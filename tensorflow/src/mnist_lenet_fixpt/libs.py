@@ -37,7 +37,10 @@ def update_fix_point_accuracy():
     update_ops: list of operations that updates the fix_def of all layers
   """
   update_ops = []
-  scope_names = ['conv1', 'conv2', 'local3', 'local4']
+  scope_names = ['conv1/weights', 'conv1/biases', 'conv1/activations',
+                 'conv2/weights', 'conv2/biases', 'conv2/activations',
+                 'local3/weights', 'local3/biases', 'local3/activations',
+                 'local4/weights', 'local4/biases', 'local4/activations']
   for scope_name in scope_names:
     with tf.variable_scope(scope_name, reuse=True):
       fix_def = tf.get_variable('fix_def', [2], dtype=tf.int32)
@@ -59,25 +62,6 @@ def update_fix_point_accuracy():
   return update_ops
 
 
-def initialize_variables():
-  """Initializing variables:
-  1. Conversion Tensors that sit in-between layers
-  2. Fixed Point number definitions for leyers in 1)
-  3. Weight and Bias tensors for each layer
-  4. Fixed Point number definitions for layers in 3)
-  """
-  # The output of the major layers that we want to convert to fixed point precision
-  scope_names = ['conv1', 'conv2', 'local3', 'local4']
-  for scope_name in scope_names:
-    with tf.variable_scope(scope_name):
-      # Fixed point nunmber precision settings
-      fix_def = tf.get_variable('fix_def', initializer=[1, 1], trainable=False)
-
-      # Fixed point precision adjustments
-      # Assigning more or less digit/fraction bits to fixed point number
-      acc = tf.get_variable('acc', initializer=[0., 0.], trainable=False)
-
-
 def nn_layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu):
   """Reusable code for making a simple neural net layer.
 
@@ -86,20 +70,28 @@ def nn_layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu):
   and adds a number of summary ops.
   """
   # Adding a name scope ensures logical grouping of the layers in the graph.
-  with tf.name_scope(layer_name):
-    # This Variable will hold the state of the weights for the layer
-    with tf.name_scope('weights'):
-      weights = varlib.weight_variable([input_dim, output_dim])
-      sumlib.variable_summaries(weights)
-    with tf.name_scope('biases'):
-      biases = varlib.bias_variable([output_dim])
-      sumlib.variable_summaries(biases)
-    with tf.name_scope('Wx_plus_b'):
-      preactivate = tf.matmul(input_tensor, weights) + biases
-      tf.summary.histogram('pre_activations', preactivate)
-    activations = act(preactivate, name='activation')
-    tf.summary.histogram('activations', activations)
-    return activations
+  # This Variable will hold the state of the weights for the layer
+  # weights
+  with tf.variable_scope('weights') as scope:
+    weights = tf.get_variable('weights',
+                initializer=tf.truncated_normal([input_dim, output_dim],
+                                                 stddev=0.1))
+    fixed_weights = to_fixed_point(weights, scope)
+    #sumlib.variable_summaries(weights)
+  # biases
+  with tf.variable_scope('biases') as scope:
+    biases = tf.get_variable('biases',
+               initializer=tf.constant(0.1, shape=[output_dim]))
+    fixed_biases = to_fixed_point(biases, scope)
+    #sumlib.variable_summaries(biases)
+  # Wx_+_b
+  with tf.variable_scope('activations') as scope:
+    preactivate = tf.matmul(input_tensor, fixed_weights) + fixed_biases
+    tf.summary.histogram('pre_activations', preactivate)
+    activations = act(preactivate, name='activations')
+    fixed_activations = to_fixed_point(activations, scope)
+    #tf.summary.histogram('activations', activations)
+  return fixed_activations
 
 # convolution layer - output same size as input: stride = 1; 0-padded
 def conv2d(x, W):
@@ -121,22 +113,29 @@ def conv_layer(patch_dim,
   """ Reusable code for making a convolution layer
   It has a conv layer and a pooling layer
   """
-  with tf.name_scope(layer_name):
-    with tf.name_scope('weights'):
-      W_conv = varlib.weight_variable([patch_dim[0],
-                               patch_dim[1],
-                               num_input_ch,
-                               num_features])
-      sumlib.variable_summaries(W_conv)
-    with tf.name_scope('biases'):
-      b_conv = varlib.bias_variable([num_features])
-      sumlib.variable_summaries(b_conv)
-    with tf.name_scope('conv'):
-      h_conv = act(conv2d(flat_inputs, W_conv) + b_conv)
-      tf.summary.histogram('convolutions', h_conv)
-    h_pool = max_pool_2x2(h_conv)
-    tf.summary.histogram('pools', h_pool)
-    return h_pool
+  # wieghts
+  with tf.variable_scope('weights') as scope:
+    W_conv = tf.get_variable('weights',
+               initializer=tf.truncated_normal([patch_dim[0], patch_dim[1],
+                                                num_input_ch, num_features],
+                                                stddev=0.1))
+    fixed_W_conv = to_fixed_point(W_conv, scope)
+    #sumlib.variable_summaries(W_conv)
+  # biases
+  with tf.variable_scope('biases') as scope:
+    b_conv = tf.get_variable('biases',
+               initializer=tf.constant(0.1, shape=[num_features]))
+    fixed_b_conv = to_fixed_point(b_conv, scope)
+    #sumlib.variable_summaries(b_conv)
+  # activation convolution
+  with tf.variable_scope('activations') as scope:
+    h_conv = act(conv2d(flat_inputs, fixed_W_conv) + fixed_b_conv)
+    fixed_h_conv = to_fixed_point(h_conv, scope)
+    # max pool
+    with tf.name_scope('max_pool'):
+      h_pool = max_pool_2x2(fixed_h_conv)
+      tf.summary.histogram('pools', h_pool)
+  return h_pool
 
 def dropout(local3):
   """Apply Dropout to avoid overfitting
