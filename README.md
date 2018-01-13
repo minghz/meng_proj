@@ -1,23 +1,4 @@
-# M.Eng. Project
-Research with Tensorflow
+Project discontinued here, and continued at GitLab.
+(Taking advantage of 10GB repo limit, as I want to back up some training summaries)
 
-## Ommited directories:
-
-### All Python Virtual Env:
-```
-tensorflow/bin/
-tensorflow/include/
-tensorflow/lib/
-tensorflow/lib64
-tensorflow/pip-selfcheck.json
-```
-
-### Input Data (auto-import in-code)
-```
-tensorflow/input_data
-```
-
-### Summary generation results (Tensorboard use)
-```
-tensorflow/src/learning/summaries/
-```
+https://gitlab.com/minghz/meng_proj
